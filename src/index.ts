@@ -177,16 +177,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case 'search_notes': {
         const options: SearchOptions = {
-          tags: args.tags as string[],
-          type: args.type as any,
-          status: args.status as any,
-          category: args.category as any,
-          dateFrom: args.dateFrom as string,
-          dateTo: args.dateTo as string,
-          limit: args.limit as number
+          tags: args?.tags as string[],
+          type: args?.type as any,
+          status: args?.status as any,
+          category: args?.category as any,
+          dateFrom: args?.dateFrom as string,
+          dateTo: args?.dateTo as string,
+          limit: args?.limit as number
         };
 
-        const results = vault.searchNotes(args.query as string || '', options);
+        const results = vault.searchNotes(args?.query as string || '', options);
 
         return {
           content: [
@@ -212,13 +212,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_note': {
-        const note = vault.getNote(args.path as string);
+        const note = vault.getNote(args?.path as string);
         if (!note) {
           return {
             content: [
               {
                 type: 'text',
-                text: `Note not found: ${args.path}`
+                text: `Note not found: ${args?.path}`
               }
             ],
             isError: true
@@ -236,7 +236,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_notes_by_tag': {
-        const notes = vault.getNotesByTag(args.tag as string);
+        const notes = vault.getNotesByTag(args?.tag as string);
         return {
           content: [
             {
@@ -258,7 +258,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_recent_notes': {
-        const limit = (args.limit as number) || 10;
+        const limit = (args?.limit as number) || 10;
         const notes = vault.getRecentNotes(limit);
         return {
           content: [
@@ -300,10 +300,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'summarize_notes': {
         const options: SearchOptions = {
-          tags: args.tags as string[],
-          type: args.type as any,
-          status: args.status as any,
-          category: args.category as any
+          tags: args?.tags as string[],
+          type: args?.type as any,
+          status: args?.status as any,
+          category: args?.category as any
         };
 
         const notes = vault.searchNotes('', options);

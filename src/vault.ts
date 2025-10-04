@@ -33,7 +33,7 @@ export class ObsidianVault {
       files.push(...matches);
     }
 
-    this.notes = await Promise.all(
+    const notesWithPossibleNulls = await Promise.all(
       files.map(async (filePath) => {
         try {
           const content = await readFile(filePath, 'utf-8');
@@ -48,13 +48,15 @@ export class ObsidianVault {
             content: markdownContent,
             frontmatter: data as any,
             excerpt
-          };
+          } as Note;
         } catch (error) {
           console.error(`Error reading ${filePath}:`, error);
           return null;
         }
       })
-    ).then(notes => notes.filter((n): n is Note => n !== null));
+    );
+
+    this.notes = notesWithPossibleNulls.filter((n): n is Note => n !== null);
   }
 
   private createExcerpt(content: string, length: number = 200): string {
