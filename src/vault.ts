@@ -168,6 +168,9 @@ export class ObsidianVault {
       keys: [
         { name: 'title', weight: this.config.searchWeights.title },
         { name: 'frontmatter.tags', weight: this.config.searchWeights.tags },
+        { name: 'frontmatter.type', weight: this.config.searchWeights.frontmatter },
+        { name: 'frontmatter.status', weight: this.config.searchWeights.frontmatter },
+        { name: 'frontmatter.category', weight: this.config.searchWeights.frontmatter },
         { name: 'content', weight: this.config.searchWeights.content }
       ],
       threshold: 0.4,
@@ -196,6 +199,26 @@ export class ObsidianVault {
 
   private applyFilters(notes: Note[], options: SearchOptions): Note[] {
     let filtered = notes;
+
+    // Filter by path pattern
+    if (options.path) {
+      const pattern = options.path.toLowerCase();
+      filtered = filtered.filter(note => {
+        const notePath = note.path.toLowerCase();
+        // Support glob-style patterns (e.g., "Work/Puppet/**")
+        if (pattern.endsWith('/**')) {
+          const prefix = pattern.slice(0, -3);
+          return notePath.startsWith(prefix);
+        }
+        // Support exact path matching
+        return notePath.includes(pattern);
+      });
+    }
+
+    // Exclude Archive unless explicitly included
+    if (!options.includeArchive) {
+      filtered = filtered.filter(note => !note.path.toLowerCase().startsWith('archive/'));
+    }
 
     if (options.tags && options.tags.length > 0) {
       filtered = filtered.filter(note =>

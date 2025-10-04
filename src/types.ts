@@ -50,6 +50,10 @@ export interface SearchOptions {
   dateFrom?: string;
   /** Filter notes modified until this date (YYYY-MM-DD) */
   dateTo?: string;
+  /** Filter by path pattern (e.g., "Work/Puppet/**", "Projects/**") */
+  path?: string;
+  /** Include archived notes (default: false) */
+  includeArchive?: boolean;
   /** Maximum number of results to return (1-100) */
   limit?: number;
 }

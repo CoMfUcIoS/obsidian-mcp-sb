@@ -139,6 +139,15 @@ const tools: Tool[] = [
           type: 'string',
           description: 'Filter notes modified until this date (YYYY-MM-DD)'
         },
+        path: {
+          type: 'string',
+          description: 'Filter by path pattern (e.g., "Work/Puppet/**", "Projects/Active/**")'
+        },
+        includeArchive: {
+          type: 'boolean',
+          description: 'Include archived notes in results (default: false)',
+          default: false
+        },
         limit: {
           type: 'number',
           description: 'Maximum number of results (default: 20)',
@@ -284,6 +293,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           category: args?.category as any,
           dateFrom: args?.dateFrom as string,
           dateTo: args?.dateTo as string,
+          path: args?.path as string,
+          includeArchive: args?.includeArchive as boolean,
           limit: limit
         };
 

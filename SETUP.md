@@ -67,17 +67,20 @@ You can configure multiple vaults by adding multiple server entries:
 For development or customization:
 
 1. **Install dependencies**
+
    ```bash
    cd obsidian-mcp-sb
    npm install
    ```
 
 2. **Build the server**
+
    ```bash
    npm run build
    ```
 
 3. **Link globally**
+
    ```bash
    npm link
    ```
@@ -89,10 +92,7 @@ For development or customization:
      "mcpServers": {
        "obsidian-sb": {
          "command": "obsidian-mcp-sb",
-         "args": [
-           "--vault-path",
-           "/path/to/your/vault"
-         ]
+         "args": ["--vault-path", "/path/to/your/vault"]
        }
      }
    }
@@ -151,7 +151,7 @@ Edit `src/config.ts` and change the `vaultPath`:
 
 ```typescript
 export const config: VaultConfig = {
-  vaultPath: '/path/to/your/vault',
+  vaultPath: "/path/to/your/vault",
   // ...
 };
 ```
@@ -176,10 +176,10 @@ Update `indexPatterns` in `src/config.ts`:
 
 ```typescript
 indexPatterns: [
-  'Work/**/*.md',
-  'Projects/**/*.md',
-  'CustomFolder/**/*.md'  // Add your folder
-]
+  "Work/**/*.md",
+  "Projects/**/*.md",
+  "CustomFolder/**/*.md", // Add your folder
+];
 ```
 
 ### Exclude More Patterns
@@ -188,11 +188,11 @@ Add to `excludePatterns` in `src/config.ts`:
 
 ```typescript
 excludePatterns: [
-  'Archive/**/*.md',
-  '_Meta/Attachments/**',
-  '.trash/**',
-  'Private/**/*.md'  // Add patterns to exclude
-]
+  "Archive/**/*.md",
+  "_Meta/Attachments/**",
+  ".trash/**",
+  "Private/**/*.md", // Add patterns to exclude
+];
 ```
 
 ## Development Mode
@@ -208,5 +208,4 @@ This will watch for file changes and rebuild automatically.
 ## Next Steps
 
 - Read the full [README.md](README.md) for all available tools
-- Review [MCP-Configuration-Guide.md](../_Meta/MCP-Configuration-Guide.md) for vault optimization tips
 - Start using natural language queries with Claude Code!

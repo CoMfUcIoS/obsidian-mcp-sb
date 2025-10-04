@@ -1,16 +1,29 @@
 # Obsidian MCP Second Brain Server
 
-An MCP (Model Context Protocol) server that provides intelligent access to your Obsidian vault, enabling it to function as a "second brain" for LLMs.
+An MCP (Model Context Protocol) server that provides intelligent **read-only** access to your Obsidian vault, enabling it to function as a "second brain" for LLMs.
 
 ## Features
 
 - **Semantic Search**: Full-text search across all notes with fuzzy matching
 - **Tag-Based Filtering**: Search by hierarchical tags (e.g., `work/puppet`, `tech/golang`)
+- **Path-Based Filtering**: Filter by directory patterns (e.g., `Work/Puppet/**`)
 - **Temporal Queries**: Filter notes by creation/modification dates
 - **Metadata Filtering**: Filter by type, status, and category
 - **Note Retrieval**: Get full content of specific notes
 - **Smart Summarization**: Generate summaries of note collections
 - **Recent Notes**: Quick access to recently modified notes
+- **Archive Control**: Optionally include archived notes in searches
+
+## Read-Only Design
+
+This MCP server is intentionally **read-only** to ensure your vault remains safe during AI interactions. It provides:
+- ✅ Search and retrieve notes
+- ✅ Filter by metadata and paths
+- ✅ Generate summaries and statistics
+- ❌ No note creation or editing
+- ❌ No file modifications
+
+For write operations, consider using dedicated Obsidian plugins with built-in safety checks.
 
 ## Installation
 
@@ -62,15 +75,32 @@ Search notes with optional filters.
 - `category` (enum, optional): `work`, `personal`, `knowledge`, `life`, `dailies`
 - `dateFrom` (string, optional): Start date (YYYY-MM-DD)
 - `dateTo` (string, optional): End date (YYYY-MM-DD)
+- `path` (string, optional): Filter by directory pattern (e.g., `"Work/Puppet/**"`)
+- `includeArchive` (boolean, optional): Include archived notes (default: false)
 - `limit` (number, optional): Max results (default: 20)
 
-**Example:**
+**Examples:**
 ```json
 {
   "query": "docker deployment",
   "tags": ["tech/devops"],
   "status": "active",
   "limit": 10
+}
+```
+
+```json
+{
+  "path": "Work/Puppet/**",
+  "status": "active"
+}
+```
+
+```json
+{
+  "query": "meeting notes",
+  "includeArchive": true,
+  "dateFrom": "2025-01-01"
 }
 ```
 
@@ -189,11 +219,11 @@ If you're developing locally with `npm link`:
 
 ## Example Queries
 
-### Find Active Puppet Work
+### Find Active Puppet Work (Path Filtering)
 ```json
 {
   "tool": "search_notes",
-  "tags": ["work/puppet"],
+  "path": "Work/Puppet/**",
   "status": "active"
 }
 ```
@@ -207,7 +237,7 @@ If you're developing locally with `npm link`:
 }
 ```
 
-### Find Project Ideas
+### Find Project Ideas (Excluding Archive)
 ```json
 {
   "tool": "search_notes",
@@ -222,6 +252,17 @@ If you're developing locally with `npm link`:
   "tool": "search_notes",
   "query": "aeropress",
   "tags": ["coffee"]
+}
+```
+
+### Historical Search (Include Archive)
+```json
+{
+  "tool": "search_notes",
+  "query": "project retrospective",
+  "includeArchive": true,
+  "dateFrom": "2024-01-01",
+  "dateTo": "2024-12-31"
 }
 ```
 
@@ -250,13 +291,15 @@ category: knowledge
 
 ## Search Weights
 
-The server uses weighted search scoring:
+The server uses weighted search scoring for semantic search:
 
 - **Title**: 3.0x
 - **Tags**: 2.5x
-- **Frontmatter**: 2.0x
+- **Frontmatter** (type, status, category): 2.0x
 - **Content**: 1.0x
-- **Recency Boost**: 1.5x
+- **Recency Boost**: 1.5x (applied to all results)
+
+This means searching for "meeting" will match notes with `type: meeting` higher than notes containing "meeting" in their content.
 
 ## Development
 
