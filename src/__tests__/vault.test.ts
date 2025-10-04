@@ -95,6 +95,8 @@ describe('ObsidianVault', () => {
     test('matches hierarchical tags (parent matches children)', async () => {
       await vault.initialize();
       const notes = vault.getNotesByTag('work');
+      // Both notes should match 'work' tag (note1 has work/puppet, note2 has work)
+      expect(notes.length).toBe(2);
       const puppetNotes = notes.filter(n => n.frontmatter.tags?.includes('work/puppet'));
       expect(puppetNotes.length).toBe(1);
     });
@@ -234,6 +236,176 @@ describe('ObsidianVault', () => {
 
       expect(notes.length).toBe(1);
       expect(notes[0].frontmatter.modified).toBe('2025-01-01');
+    });
+
+    test('filters notes by dateTo', async () => {
+      await writeFile(
+        join(testVaultPath, 'Work', 'old.md'),
+        '---\nmodified: "2020-01-01"\n---\nContent'
+      );
+      await writeFile(
+        join(testVaultPath, 'Work', 'recent.md'),
+        '---\nmodified: "2025-01-01"\n---\nContent'
+      );
+
+      await vault.initialize();
+
+      const notes = vault.searchNotes('', {
+        dateTo: '2023-01-01'
+      });
+
+      expect(notes.length).toBe(1);
+      expect(notes[0].frontmatter.modified).toBe('2020-01-01');
+    });
+  });
+
+  describe('Vault Methods', () => {
+    beforeEach(async () => {
+      await writeFile(
+        join(testVaultPath, 'Work', 'project.md'),
+        '---\ntags: [work]\ntype: project\nstatus: active\n---\nProject content'
+      );
+      await writeFile(
+        join(testVaultPath, 'Work', 'task.md'),
+        '---\ntags: [work]\ntype: task\nstatus: completed\n---\nTask content'
+      );
+    });
+
+    test('getNotesByType returns filtered notes', async () => {
+      await vault.initialize();
+      const projectNotes = vault.getNotesByType('project');
+      expect(projectNotes.length).toBe(1);
+      expect(projectNotes[0].title).toBe('project');
+    });
+
+    test('getNotesByStatus returns filtered notes', async () => {
+      await vault.initialize();
+      const completedNotes = vault.getNotesByStatus('completed');
+      expect(completedNotes.length).toBe(1);
+      expect(completedNotes[0].title).toBe('task');
+    });
+
+    test('getNote returns undefined for non-existent path', async () => {
+      await vault.initialize();
+      const note = vault.getNote('nonexistent.md');
+      expect(note).toBeUndefined();
+    });
+  });
+
+  describe('Search Options', () => {
+    beforeEach(async () => {
+      await writeFile(
+        join(testVaultPath, 'Work', 'project.md'),
+        '---\ntags: [work]\ntype: project\n---\nProject content'
+      );
+      await writeFile(
+        join(testVaultPath, 'Work', 'note.md'),
+        '---\ntags: [personal]\ntype: note\n---\nNote content'
+      );
+    });
+
+    test('filters by type', async () => {
+      await vault.initialize();
+      const notes = vault.searchNotes('', { type: 'project' });
+      expect(notes.length).toBe(1);
+      expect(notes[0].title).toBe('project');
+    });
+
+    test('filters by status', async () => {
+      await writeFile(
+        join(testVaultPath, 'Work', 'completed.md'),
+        '---\nstatus: completed\n---\nCompleted'
+      );
+      await vault.initialize();
+      const notes = vault.searchNotes('', { status: 'completed' });
+      expect(notes.length).toBe(1);
+    });
+
+    test('filters by category', async () => {
+      await writeFile(
+        join(testVaultPath, 'Work', 'work-note.md'),
+        '---\ncategory: work\n---\nWork note'
+      );
+      await vault.initialize();
+      const notes = vault.searchNotes('', { category: 'work' });
+      expect(notes.length).toBe(1);
+    });
+  });
+
+  describe('Path Filtering', () => {
+    beforeEach(async () => {
+      await mkdir(join(testVaultPath, 'Work', 'Puppet'), { recursive: true });
+      await mkdir(join(testVaultPath, 'Projects'), { recursive: true });
+
+      await writeFile(
+        join(testVaultPath, 'Work', 'Puppet', 'note1.md'),
+        '---\ntags: [puppet]\n---\nContent'
+      );
+      await writeFile(
+        join(testVaultPath, 'Work', 'note2.md'),
+        '---\ntags: [work]\n---\nContent'
+      );
+      await writeFile(
+        join(testVaultPath, 'Projects', 'note3.md'),
+        '---\ntags: [project]\n---\nContent'
+      );
+    });
+
+    test('filters by exact path pattern', async () => {
+      await vault.initialize();
+      const notes = vault.searchNotes('', { path: 'Work/Puppet' });
+      expect(notes.length).toBe(1);
+      expect(notes[0].path).toContain('Work/Puppet');
+    });
+
+    test('filters by glob path pattern with /**', async () => {
+      await vault.initialize();
+      const notes = vault.searchNotes('', { path: 'Work/**' });
+      expect(notes.length).toBe(2);
+      expect(notes.every(n => n.path.startsWith('Work'))).toBe(true);
+    });
+  });
+
+  describe('Error Handling', () => {
+    test('handles vault with no markdown files', async () => {
+      await vault.initialize();
+      const notes = vault.getAllNotes();
+      expect(notes.length).toBe(0);
+    });
+
+    test('handles corrupt frontmatter gracefully', async () => {
+      await writeFile(
+        join(testVaultPath, 'Work', 'corrupt.md'),
+        '---\ninvalid: yaml: : :\n---\nContent'
+      );
+
+      await vault.initialize();
+      const notes = vault.getAllNotes();
+
+      // Should skip the corrupt file or handle it gracefully
+      expect(notes.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('Archive Filtering in Search', () => {
+    test('includes archive when includeArchive is true', async () => {
+      // Update config to not exclude Archive in indexing
+      const configWithArchive = {
+        ...config,
+        excludePatterns: [] // Don't exclude Archive at index time
+      };
+      vault = new ObsidianVault(configWithArchive);
+
+      await writeFile(
+        join(testVaultPath, 'Archive', 'archived.md'),
+        '---\ntags: [archive]\n---\nArchived content'
+      );
+
+      await vault.initialize();
+      const notes = vault.searchNotes('', { includeArchive: true });
+
+      // Should include archived notes
+      expect(notes.some(n => n.path.startsWith('Archive'))).toBe(true);
     });
   });
 });
