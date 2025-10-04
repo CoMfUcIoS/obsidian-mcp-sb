@@ -76,6 +76,8 @@ export interface VaultConfig {
   maxSearchResults: number;
   /** Maximum number of recent notes (default: 100) */
   maxRecentNotes: number;
+  /** Use in-memory storage instead of database (default: false) */
+  useMemory?: boolean;
   /** Search scoring weights */
   searchWeights: {
     /** Weight for title matches */

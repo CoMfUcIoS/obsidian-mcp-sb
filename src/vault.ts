@@ -2,20 +2,21 @@ import { readFile, stat } from 'fs/promises';
 import { glob } from 'glob';
 import matter from 'gray-matter';
 import { basename, relative } from 'path';
-import Fuse from 'fuse.js';
-import { Note, SearchOptions, VaultConfig, parseDate, isValidType, isValidStatus, isValidCategory, NoteFrontmatter } from './types.js';
+import { Note, SearchOptions, VaultConfig, isValidType, isValidStatus, isValidCategory, NoteFrontmatter } from './types.js';
+import { IStorage } from './storage.js';
+import { createStorage } from './storage-factory.js';
 
 /**
  * Manages indexing and searching of an Obsidian vault
  */
 export class ObsidianVault {
-  private notes: Note[] = [];
-  private fuse: Fuse<Note> | null = null;
+  private storage: IStorage;
   private config: VaultConfig;
   private indexErrors: Array<{ path: string; error: string }> = [];
 
   constructor(config: VaultConfig) {
     this.config = config;
+    this.storage = createStorage(config);
   }
 
   /**
@@ -26,9 +27,10 @@ export class ObsidianVault {
     try {
       console.error('Initializing Obsidian vault...');
       this.indexErrors = []; // Reset errors
-      await this.indexNotes();
-      this.initializeSearch();
-      console.error(`Indexed ${this.notes.length} notes`);
+      await this.storage.initialize();
+      const notes = await this.indexNotes();
+      await this.storage.upsertNotes(notes);
+      console.error(`Indexed ${notes.length} notes`);
 
       if (this.indexErrors.length > 0) {
         console.error(`Warning: ${this.indexErrors.length} file(s) failed to index`);
@@ -43,7 +45,7 @@ export class ObsidianVault {
     }
   }
 
-  private async indexNotes(): Promise<void> {
+  private async indexNotes(): Promise<Note[]> {
     const files: string[] = [];
 
     try {
@@ -112,7 +114,7 @@ export class ObsidianVault {
       })
     );
 
-    this.notes = notesWithPossibleNulls.filter((n): n is Note => n !== null);
+    return notesWithPossibleNulls.filter((n): n is Note => n !== null);
   }
 
   private createExcerpt(content: string, length: number = 200): string {
@@ -151,46 +153,6 @@ export class ObsidianVault {
     return cleanContent.slice(0, length) + (cleanContent.length > length ? '...' : '');
   }
 
-  /**
-   * Matches a note tag against a search tag with support for hierarchical tags.
-   * Examples:
-   *   - "work/puppet" matches "work/puppet" (exact)
-   *   - "work" matches "work/puppet" (parent tag)
-   *   - "work/puppet" does NOT match "work" (child tag doesn't match parent search)
-   *   - "work" does NOT match "homework" (prevents false positives)
-   */
-  private matchesTag(noteTag: string, searchTag: string): boolean {
-    const normalizedNoteTag = noteTag.toLowerCase();
-    const normalizedSearchTag = searchTag.toLowerCase();
-
-    // Exact match
-    if (normalizedNoteTag === normalizedSearchTag) {
-      return true;
-    }
-
-    // Hierarchical match: search for parent tag (e.g., "work" matches "work/puppet")
-    if (normalizedNoteTag.startsWith(normalizedSearchTag + '/')) {
-      return true;
-    }
-
-    return false;
-  }
-
-  private initializeSearch(): void {
-    this.fuse = new Fuse(this.notes, {
-      keys: [
-        { name: 'title', weight: this.config.searchWeights.title },
-        { name: 'frontmatter.tags', weight: this.config.searchWeights.tags },
-        { name: 'frontmatter.type', weight: this.config.searchWeights.frontmatter },
-        { name: 'frontmatter.status', weight: this.config.searchWeights.frontmatter },
-        { name: 'frontmatter.category', weight: this.config.searchWeights.frontmatter },
-        { name: 'content', weight: this.config.searchWeights.content }
-      ],
-      threshold: 0.4,
-      includeScore: true,
-      ignoreLocation: true
-    });
-  }
 
   /**
    * Search notes with fuzzy matching and filters
@@ -198,92 +160,8 @@ export class ObsidianVault {
    * @param options - Filter and limit options
    * @returns Array of matching notes sorted by relevance and recency
    */
-  searchNotes(query: string, options: SearchOptions = {}): Note[] {
-    let results = query && this.fuse
-      ? this.fuse.search(query).map(result => result.item)
-      : [...this.notes];
-
-    results = this.applyFilters(results, options);
-    results = this.applyRecencyBoost(results);
-
-    const limit = options.limit || 20;
-    return results.slice(0, limit);
-  }
-
-  private applyFilters(notes: Note[], options: SearchOptions): Note[] {
-    let filtered = notes;
-
-    // Filter by path pattern
-    if (options.path) {
-      const pattern = options.path.toLowerCase();
-      filtered = filtered.filter(note => {
-        const notePath = note.path.toLowerCase();
-        // Support glob-style patterns (e.g., "Work/Puppet/**")
-        if (pattern.endsWith('/**')) {
-          const prefix = pattern.slice(0, -3);
-          return notePath.startsWith(prefix);
-        }
-        // Support exact path matching
-        return notePath.includes(pattern);
-      });
-    }
-
-    // Exclude Archive unless explicitly included
-    if (!options.includeArchive) {
-      filtered = filtered.filter(note => !note.path.toLowerCase().startsWith('archive/'));
-    }
-
-    if (options.tags && options.tags.length > 0) {
-      filtered = filtered.filter(note =>
-        options.tags!.some(tag =>
-          note.frontmatter.tags?.some(noteTag =>
-            this.matchesTag(noteTag, tag)
-          )
-        )
-      );
-    }
-
-    if (options.type) {
-      filtered = filtered.filter(note => note.frontmatter.type === options.type);
-    }
-
-    if (options.status) {
-      filtered = filtered.filter(note => note.frontmatter.status === options.status);
-    }
-
-    if (options.category) {
-      filtered = filtered.filter(note => note.frontmatter.category === options.category);
-    }
-
-    if (options.dateFrom) {
-      const fromDate = parseDate(options.dateFrom);
-      if (fromDate) {
-        filtered = filtered.filter(note => {
-          const noteDate = parseDate(note.frontmatter.modified || '');
-          return noteDate && noteDate >= fromDate;
-        });
-      }
-    }
-
-    if (options.dateTo) {
-      const toDate = parseDate(options.dateTo);
-      if (toDate) {
-        filtered = filtered.filter(note => {
-          const noteDate = parseDate(note.frontmatter.modified || '');
-          return noteDate && noteDate <= toDate;
-        });
-      }
-    }
-
-    return filtered;
-  }
-
-  private applyRecencyBoost(notes: Note[]): Note[] {
-    return notes.sort((a, b) => {
-      const dateA = new Date(a.frontmatter.modified || a.frontmatter.created || 0);
-      const dateB = new Date(b.frontmatter.modified || b.frontmatter.created || 0);
-      return dateB.getTime() - dateA.getTime();
-    });
+  searchNotes(query: string, options: SearchOptions = {}): Promise<Note[]> {
+    return this.storage.searchNotes(query, options);
   }
 
   /**
@@ -291,16 +169,16 @@ export class ObsidianVault {
    * @param path - Relative path from vault root
    * @returns The note or undefined if not found
    */
-  getNote(path: string): Note | undefined {
-    return this.notes.find(note => note.path === path);
+  async getNote(path: string): Promise<Note | null> {
+    return this.storage.getNote(path);
   }
 
   /**
    * Get all indexed notes
    * @returns Array of all notes
    */
-  getAllNotes(): Note[] {
-    return [...this.notes];
+  async getAllNotes(): Promise<Note[]> {
+    return this.storage.getAllNotes();
   }
 
   /**
@@ -308,30 +186,8 @@ export class ObsidianVault {
    * @param tag - Tag to search for (e.g., "work" or "work/puppet")
    * @returns Array of matching notes
    */
-  getNotesByTag(tag: string): Note[] {
-    return this.notes.filter(note =>
-      note.frontmatter.tags?.some(t =>
-        this.matchesTag(t, tag)
-      )
-    );
-  }
-
-  /**
-   * Get notes by type
-   * @param type - Note type to filter by
-   * @returns Array of matching notes
-   */
-  getNotesByType(type: string): Note[] {
-    return this.notes.filter(note => note.frontmatter.type === type);
-  }
-
-  /**
-   * Get notes by status
-   * @param status - Status to filter by
-   * @returns Array of matching notes
-   */
-  getNotesByStatus(status: string): Note[] {
-    return this.notes.filter(note => note.frontmatter.status === status);
+  async getNotesByTag(tag: string): Promise<Note[]> {
+    return this.storage.getNotesByTag(tag);
   }
 
   /**
@@ -339,7 +195,7 @@ export class ObsidianVault {
    * @param limit - Maximum number of notes to return
    * @returns Array of notes sorted by modification date (newest first)
    */
-  getRecentNotes(limit: number = 10): Note[] {
-    return this.applyRecencyBoost([...this.notes]).slice(0, limit);
+  async getRecentNotes(limit: number = 10): Promise<Note[]> {
+    return this.storage.getRecentNotes(limit);
   }
 }

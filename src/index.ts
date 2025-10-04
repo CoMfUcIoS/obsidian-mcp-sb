@@ -135,6 +135,8 @@ const maxSearchResults = maxSearchResultsArg ? parseInt(maxSearchResultsArg, 10)
 const maxRecentNotesArg = getArg(args, '--max-recent-notes');
 const maxRecentNotes = maxRecentNotesArg ? parseInt(maxRecentNotesArg, 10) : defaultConfig.maxRecentNotes!;
 
+const useMemory = args.includes('--use-memory');
+
 // Create configuration with CLI args and defaults
 const vaultConfig: VaultConfig = {
   vaultPath: resolvedVaultPath,
@@ -144,6 +146,7 @@ const vaultConfig: VaultConfig = {
   maxFileSize,
   maxSearchResults,
   maxRecentNotes,
+  useMemory,
   searchWeights: defaultConfig.searchWeights!
 };
 
@@ -358,7 +361,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           limit: limit
         };
 
-        const results = vault.searchNotes(
+        const results = await vault.searchNotes(
           typeof args?.query === 'string' ? args.query : '',
           options
         );
@@ -382,7 +385,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return createErrorResponse('Access denied. Path is outside vault directory');
         }
 
-        const note = vault.getNote(normalizedPath);
+        const note = await vault.getNote(normalizedPath);
         if (!note) {
           return createErrorResponse(`Note not found: ${normalizedPath}`);
         }
@@ -397,7 +400,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return createErrorResponse('Tag parameter is required and must be a string');
         }
 
-        const notes = vault.getNotesByTag(tag);
+        const notes = await vault.getNotesByTag(tag);
         return createSuccessResponse(notes.map(formatNoteSummary));
       }
 
@@ -408,12 +411,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return createErrorResponse(`Limit must be between 1 and ${vaultConfig.maxRecentNotes}`);
         }
 
-        const notes = vault.getRecentNotes(limit);
+        const notes = await vault.getRecentNotes(limit);
         return createSuccessResponse(notes.map(formatNoteSummary));
       }
 
       case 'list_tags': {
-        const allNotes = vault.getAllNotes();
+        const allNotes = await vault.getAllNotes();
         const tagSet = new Set<string>();
         allNotes.forEach(note => {
           note.frontmatter.tags?.forEach(tag => tagSet.add(tag));
@@ -442,7 +445,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           category: args?.category as typeof options.category
         };
 
-        const notes = vault.searchNotes('', options);
+        const notes = await vault.searchNotes('', options);
 
         const summary = {
           total: notes.length,

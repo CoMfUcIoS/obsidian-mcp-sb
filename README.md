@@ -4,6 +4,8 @@ An MCP (Model Context Protocol) server that provides intelligent **read-only** a
 
 ## Features
 
+- **Efficient Database Storage**: SQLite-based indexing for large vaults with persistent caching
+- **Memory Mode Option**: Optional in-memory indexing for small vaults or development
 - **Semantic Search**: Full-text search across all notes with fuzzy matching
 - **Tag-Based Filtering**: Search by hierarchical tags (e.g., `work/puppet`, `tech/golang`)
 - **Path-Based Filtering**: Filter by directory patterns (e.g., `Work/Puppet/**`)
@@ -70,6 +72,7 @@ All configuration can be done directly in your MCP configuration file using CLI 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
 | `--vault-path` | string | **(required)** | Path to your Obsidian vault |
+| `--use-memory` | flag | `false` | Use in-memory storage instead of database (for small vaults) |
 | `--index-patterns` | string | `Work/**/*.md,Projects/**/*.md,Knowledge/**/*.md,Life/**/*.md,Dailies/**/*.md` | Comma-separated patterns to index |
 | `--exclude-patterns` | string | `Archive/**/*.md,_Meta/Attachments/**,.trash/**,node_modules/**,.git/**` | Comma-separated patterns to exclude |
 | `--metadata-fields` | string | `tags,type,status,category,created,modified` | Comma-separated frontmatter fields |
@@ -114,6 +117,58 @@ Search notes with optional filters.
 - `path` (string, optional): Filter by directory pattern (e.g., `"Work/Puppet/**"`)
 - `includeArchive` (boolean, optional): Include archived notes (default: false)
 - `limit` (number, optional): Max results (default: 20, max: configurable via `maxSearchResults`)
+
+#### Search Flow Diagram
+
+```mermaid
+graph TD
+    A[Search Query] --> B{Query Empty?}
+    B -->|Yes| C[Get All Notes]
+    B -->|No| D[Full-Text Search<br/>FTS5 or Fuse.js]
+
+    C --> E[Apply Filters]
+    D --> E
+
+    E --> F{Path Filter?}
+    F -->|Yes| G[Match Path Pattern<br/>Work/Puppet/** or Work/Puppet]
+    F -->|No| H{Archive Filter?}
+    G --> H
+
+    H -->|includeArchive=false| I[Exclude archive/ paths]
+    H -->|includeArchive=true| J{Tags Filter?}
+    I --> J
+
+    J -->|Yes| K[Hierarchical Tag Match<br/>work → work/puppet ✓<br/>work → homework ✗]
+    J -->|No| L{Type Filter?}
+    K --> L
+
+    L -->|Yes| M[Filter by type<br/>note, project, task, etc.]
+    L -->|No| N{Status Filter?}
+    M --> N
+
+    N -->|Yes| O[Filter by status<br/>active, archived, etc.]
+    N -->|No| P{Category Filter?}
+    O --> P
+
+    P -->|Yes| Q[Filter by category<br/>work, personal, etc.]
+    P -->|No| R{Date Filters?}
+    Q --> R
+
+    R -->|Yes| S[Filter by dateFrom/dateTo<br/>Validate YYYY-MM-DD]
+    R -->|No| T[Sort by Recency<br/>modified → created]
+    S --> T
+
+    T --> U{Limit Set?}
+    U -->|Yes| V[Take First N Results]
+    U -->|No| W[Return All Results]
+    V --> X[Return Results]
+    W --> X
+
+    style D fill:#4CAF50
+    style K fill:#FF9800
+    style S fill:#2196F3
+    style T fill:#9C27B0
+```
 
 **Examples:**
 ```json
@@ -385,10 +440,124 @@ When contributing to this project:
 4. **Update documentation** if adding/changing features
 5. **Follow TypeScript strict mode** - no `any` types allowed
 
+## Storage Architecture
+
+The server uses **SQLite database storage by default** for efficient indexing and persistent caching:
+
+- **Database Mode (Default)**: Stores indexed notes in `.obsidian-mcp/notes.db` within your vault
+  - Persistent indexing (survives server restarts)
+  - Efficient for large vaults (1000+ notes)
+  - Full-text search with SQLite FTS5
+  - Lower memory usage
+
+- **Memory Mode (Optional)**: Use `--use-memory` flag for in-memory storage
+  - Faster for small vaults (<100 notes)
+  - No disk I/O overhead
+  - Useful for development and testing
+  - Uses Fuse.js for fuzzy search
+
+### Architecture Diagram
+
+```mermaid
+graph TD
+    A[MCP Client<br/>Claude/VSCode] -->|MCP Protocol| B[MCP Server<br/>index.ts]
+    B -->|Initialize| C[ObsidianVault<br/>vault.ts]
+    C -->|Create Storage| D{Storage Factory<br/>storage-factory.ts}
+
+    D -->|Default| E[DatabaseStorage<br/>database-storage.ts]
+    D -->|--use-memory| F[MemoryStorage<br/>memory-storage.ts]
+
+    E -->|Stores in| G[(SQLite DB<br/>.obsidian-mcp/notes.db)]
+    F -->|Stores in| H[In-Memory<br/>Map + Fuse.js]
+
+    C -->|Scan Files| I[Obsidian Vault<br/>*.md files]
+    I -->|Parse Frontmatter| J[gray-matter]
+    J -->|Index Notes| E
+    J -->|Index Notes| F
+
+    B -->|search_notes| C
+    B -->|get_note| C
+    B -->|get_notes_by_tag| C
+    B -->|list_tags| C
+
+    G -.->|FTS5 Search| E
+    H -.->|Fuzzy Search| F
+
+    style E fill:#4CAF50
+    style F fill:#2196F3
+    style G fill:#4CAF50
+    style H fill:#2196F3
+```
+
+### Database Schema (SQLite Mode)
+
+```mermaid
+erDiagram
+    notes ||--o{ note_tags : has
+    notes ||--o{ note_frontmatter : has
+    notes ||--|| notes_fts : "indexed by"
+
+    notes {
+        TEXT path PK "Relative path from vault root"
+        TEXT title "Note title (filename)"
+        TEXT content "Full markdown content"
+        TEXT excerpt "Plain text excerpt"
+        TEXT created "YYYY-MM-DD"
+        TEXT modified "YYYY-MM-DD"
+        TEXT type "note, project, task, daily, meeting"
+        TEXT status "active, archived, idea, completed"
+        TEXT category "work, personal, knowledge, life, dailies"
+    }
+
+    note_tags {
+        TEXT note_path FK "References notes(path)"
+        TEXT tag "Tag value (e.g., work/puppet)"
+    }
+
+    note_frontmatter {
+        TEXT note_path FK "References notes(path)"
+        TEXT key "Custom frontmatter key"
+        TEXT value "JSON-serialized value"
+    }
+
+    notes_fts {
+        TEXT path "UNINDEXED - reference only"
+        TEXT title "FTS5 indexed"
+        TEXT content "FTS5 indexed with porter stemming"
+    }
+```
+
+**Indexes:**
+- `idx_notes_modified`: Fast recency queries
+- `idx_notes_type`, `idx_notes_status`, `idx_notes_category`: Fast metadata filtering
+- `idx_note_tags_tag`, `idx_note_tags_path`: Fast tag lookups and hierarchical matching
+- `notes_fts`: Full-text search with porter stemming for natural language queries
+
+**Example with memory mode:**
+```json
+{
+  "mcpServers": {
+    "obsidian-sb": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@comfucios/obsidian-mcp-sb",
+        "--vault-path", "/path/to/vault",
+        "--use-memory"
+      ]
+    }
+  }
+}
+```
+
 ## Architecture
 
 - **`src/index.ts`**: MCP server implementation with tool handlers
-- **`src/vault.ts`**: Vault indexing, search logic, and security controls
+- **`src/vault.ts`**: Vault indexing orchestration and security controls
+- **`src/storage.ts`**: Storage interface abstraction
+- **`src/database-storage.ts`**: SQLite-based storage implementation
+- **`src/memory-storage.ts`**: In-memory storage implementation with Fuse.js
+- **`src/storage-factory.ts`**: Storage factory pattern for mode selection
 - **`src/config.ts`**: Configuration management with defaults
 - **`src/types.ts`**: TypeScript type definitions and validation utilities
 - **`src/__tests__/`**: Unit tests for critical functionality
@@ -397,9 +566,10 @@ When contributing to this project:
 
 **Production:**
 - `@modelcontextprotocol/sdk`: MCP protocol implementation
+- `better-sqlite3`: Fast SQLite database for efficient indexing
 - `gray-matter`: YAML frontmatter parsing
 - `glob`: File pattern matching for vault indexing
-- `fuse.js`: Fuzzy search functionality
+- `fuse.js`: Fuzzy search functionality (memory mode)
 
 **Development:**
 - `typescript`: Type safety and compilation

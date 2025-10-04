@@ -24,6 +24,7 @@ describe('ObsidianVault', () => {
       maxFileSize: 10 * 1024 * 1024,
       maxSearchResults: 100,
       maxRecentNotes: 100,
+      useMemory: true, // Use in-memory storage for tests
       searchWeights: {
         title: 3.0,
         tags: 2.5,
@@ -53,10 +54,10 @@ describe('ObsidianVault', () => {
 
       // Attempt to access file with path traversal
       const maliciousPath = '../../etc/passwd';
-      const result = vault.getNote(maliciousPath);
+      const result = await vault.getNote(maliciousPath);
 
-      // Should not find the file (returns undefined)
-      expect(result).toBeUndefined();
+      // Should not find the file (returns null)
+      expect(result).toBeNull();
     });
 
     test('uses relative paths correctly', async () => {
@@ -66,7 +67,7 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const notes = vault.getAllNotes();
+      const notes = await vault.getAllNotes();
 
       // Path should be relative to vault root
       expect(notes[0].path).toBe('Work/test.md');
@@ -88,13 +89,13 @@ describe('ObsidianVault', () => {
 
     test('matches exact tags', async () => {
       await vault.initialize();
-      const notes = vault.getNotesByTag('work');
+      const notes = await vault.getNotesByTag('work');
       expect(notes.length).toBe(2);
     });
 
     test('matches hierarchical tags (parent matches children)', async () => {
       await vault.initialize();
-      const notes = vault.getNotesByTag('work');
+      const notes = await vault.getNotesByTag('work');
       // Both notes should match 'work' tag (note1 has work/puppet, note2 has work)
       expect(notes.length).toBe(2);
       const puppetNotes = notes.filter(n => n.frontmatter.tags?.includes('work/puppet'));
@@ -108,7 +109,7 @@ describe('ObsidianVault', () => {
       );
       await vault.initialize();
 
-      const workNotes = vault.getNotesByTag('work');
+      const workNotes = await vault.getNotesByTag('work');
       const homeworkNote = workNotes.find(n => n.frontmatter.tags?.includes('homework'));
 
       // "homework" should NOT match "work" tag search
@@ -129,7 +130,7 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const notes = vault.getAllNotes();
+      const notes = await vault.getAllNotes();
 
       // Large file should be skipped
       expect(notes.length).toBe(0);
@@ -143,7 +144,7 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const notes = vault.getAllNotes();
+      const notes = await vault.getAllNotes();
 
       expect(notes.length).toBe(1);
       expect(notes[0].title).toBe('normal');
@@ -158,7 +159,7 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const notes = vault.getAllNotes();
+      const notes = await vault.getAllNotes();
 
       expect(notes[0].frontmatter.type).toBe('note');
       expect(notes[0].frontmatter.status).toBe('active');
@@ -173,7 +174,7 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const notes = vault.getAllNotes();
+      const notes = await vault.getAllNotes();
 
       // Should default to 'note' for invalid type
       expect(notes[0].frontmatter.type).toBe('note');
@@ -186,7 +187,7 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const notes = vault.getAllNotes();
+      const notes = await vault.getAllNotes();
 
       // Should default to 'active' for invalid status
       expect(notes[0].frontmatter.status).toBe('active');
@@ -205,7 +206,7 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const notes = vault.searchNotes('', {});
+      const notes = await vault.searchNotes('', {});
 
       // Should only find the active note (Archive is in excludePatterns)
       expect(notes.length).toBe(1);
@@ -225,12 +226,12 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const allNotes = vault.getAllNotes();
+      const allNotes = await vault.getAllNotes();
 
       // Verify both notes were indexed
       expect(allNotes.length).toBe(2);
 
-      const notes = vault.searchNotes('', {
+      const notes = await vault.searchNotes('', {
         dateFrom: '2024-01-01'
       });
 
@@ -250,7 +251,7 @@ describe('ObsidianVault', () => {
 
       await vault.initialize();
 
-      const notes = vault.searchNotes('', {
+      const notes = await vault.searchNotes('', {
         dateTo: '2023-01-01'
       });
 
@@ -273,22 +274,22 @@ describe('ObsidianVault', () => {
 
     test('getNotesByType returns filtered notes', async () => {
       await vault.initialize();
-      const projectNotes = vault.getNotesByType('project');
+      const projectNotes = await vault.searchNotes('', { type: 'project' });
       expect(projectNotes.length).toBe(1);
       expect(projectNotes[0].title).toBe('project');
     });
 
     test('getNotesByStatus returns filtered notes', async () => {
       await vault.initialize();
-      const completedNotes = vault.getNotesByStatus('completed');
+      const completedNotes = await vault.searchNotes('', { status: 'completed' });
       expect(completedNotes.length).toBe(1);
       expect(completedNotes[0].title).toBe('task');
     });
 
-    test('getNote returns undefined for non-existent path', async () => {
+    test('getNote returns null for non-existent path', async () => {
       await vault.initialize();
-      const note = vault.getNote('nonexistent.md');
-      expect(note).toBeUndefined();
+      const note = await vault.getNote('nonexistent.md');
+      expect(note).toBeNull();
     });
   });
 
@@ -306,7 +307,7 @@ describe('ObsidianVault', () => {
 
     test('filters by type', async () => {
       await vault.initialize();
-      const notes = vault.searchNotes('', { type: 'project' });
+      const notes = await vault.searchNotes('', { type: 'project' });
       expect(notes.length).toBe(1);
       expect(notes[0].title).toBe('project');
     });
@@ -317,7 +318,7 @@ describe('ObsidianVault', () => {
         '---\nstatus: completed\n---\nCompleted'
       );
       await vault.initialize();
-      const notes = vault.searchNotes('', { status: 'completed' });
+      const notes = await vault.searchNotes('', { status: 'completed' });
       expect(notes.length).toBe(1);
     });
 
@@ -327,7 +328,7 @@ describe('ObsidianVault', () => {
         '---\ncategory: work\n---\nWork note'
       );
       await vault.initialize();
-      const notes = vault.searchNotes('', { category: 'work' });
+      const notes = await vault.searchNotes('', { category: 'work' });
       expect(notes.length).toBe(1);
     });
   });
@@ -353,14 +354,14 @@ describe('ObsidianVault', () => {
 
     test('filters by exact path pattern', async () => {
       await vault.initialize();
-      const notes = vault.searchNotes('', { path: 'Work/Puppet' });
+      const notes = await vault.searchNotes('', { path: 'Work/Puppet' });
       expect(notes.length).toBe(1);
       expect(notes[0].path).toContain('Work/Puppet');
     });
 
     test('filters by glob path pattern with /**', async () => {
       await vault.initialize();
-      const notes = vault.searchNotes('', { path: 'Work/**' });
+      const notes = await vault.searchNotes('', { path: 'Work/**' });
       expect(notes.length).toBe(2);
       expect(notes.every(n => n.path.startsWith('Work'))).toBe(true);
     });
@@ -369,7 +370,7 @@ describe('ObsidianVault', () => {
   describe('Error Handling', () => {
     test('handles vault with no markdown files', async () => {
       await vault.initialize();
-      const notes = vault.getAllNotes();
+      const notes = await vault.getAllNotes();
       expect(notes.length).toBe(0);
     });
 
@@ -380,7 +381,7 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const notes = vault.getAllNotes();
+      const notes = await vault.getAllNotes();
 
       // Should skip the corrupt file or handle it gracefully
       expect(notes.length).toBeGreaterThanOrEqual(0);
@@ -402,10 +403,65 @@ describe('ObsidianVault', () => {
       );
 
       await vault.initialize();
-      const notes = vault.searchNotes('', { includeArchive: true });
+      const notes = await vault.searchNotes('', { includeArchive: true });
 
       // Should include archived notes
       expect(notes.some(n => n.path.startsWith('Archive'))).toBe(true);
+    });
+  });
+
+  describe('Initialization Error Handling', () => {
+    test('handles non-existent vault path gracefully', async () => {
+      // glob doesn't throw for non-existent paths, just returns empty
+      const invalidConfig = {
+        ...config,
+        vaultPath: '/nonexistent/invalid/path',
+        indexPatterns: ['**/*.md']
+      };
+
+      const invalidVault = new ObsidianVault(invalidConfig);
+
+      // Should initialize without error but find no notes
+      await invalidVault.initialize();
+      const notes = await invalidVault.getAllNotes();
+      expect(notes.length).toBe(0);
+    });
+
+    test('logs warning when no files match index patterns', async () => {
+      // Create vault with no markdown files
+      const emptyVaultPath = join(tmpdir(), `empty-vault-${Date.now()}`);
+      await mkdir(emptyVaultPath, { recursive: true });
+
+      const emptyConfig = {
+        ...config,
+        vaultPath: emptyVaultPath,
+        indexPatterns: ['**/*.md']
+      };
+
+      const emptyVault = new ObsidianVault(emptyConfig);
+
+      // Should not throw but should log warning
+      await emptyVault.initialize();
+      const notes = await emptyVault.getAllNotes();
+      expect(notes.length).toBe(0);
+
+      await rm(emptyVaultPath, { recursive: true, force: true });
+    });
+  });
+
+  describe('Index Error Tracking', () => {
+    test('tracks errors when files fail to index', async () => {
+      // Create a file that will cause indexing issues
+      await writeFile(
+        join(testVaultPath, 'Work', 'problem.md'),
+        '---\nmalformed: yaml: : : :\n---\nContent'
+      );
+
+      await vault.initialize();
+
+      // Vault should still initialize, but may have tracked errors
+      const notes = await vault.getAllNotes();
+      expect(notes).toBeDefined();
     });
   });
 });

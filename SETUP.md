@@ -156,6 +156,7 @@ All configuration can be done via CLI arguments in your `mcp.json` file. No need
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
 | `--vault-path` | string | **(required)** | Path to your Obsidian vault |
+| `--use-memory` | flag | `false` | Use in-memory storage instead of database (for small vaults) |
 | `--index-patterns` | string | `Work/**/*.md,Projects/**/*.md,Knowledge/**/*.md,Life/**/*.md,Dailies/**/*.md` | Comma-separated patterns to index |
 | `--exclude-patterns` | string | `Archive/**/*.md,_Meta/Attachments/**,.trash/**,node_modules/**,.git/**` | Comma-separated patterns to exclude |
 | `--metadata-fields` | string | `tags,type,status,category,created,modified` | Comma-separated frontmatter fields |
@@ -187,13 +188,20 @@ All configuration can be done via CLI arguments in your `mcp.json` file. No need
 ### Performance Tuning
 
 **For large vaults (1000+ notes):**
-- Increase `--max-file-size` only if needed (uses more memory)
-- Decrease `--max-search-results` for faster searches
+- Use database mode (default) for efficient indexing and lower memory usage
+- Database is stored in `.obsidian-mcp/notes.db` within your vault
+- Indexing persists across server restarts (no re-indexing needed)
+- Decrease `--max-search-results` for faster searches if needed
 - Use more specific `--index-patterns` to limit indexed notes
 
 **For small vaults (<100 notes):**
+- Consider using `--use-memory` flag for faster in-memory search
 - Can increase all limits safely
 - Index all folders including archive if needed
+
+**Storage Mode Comparison:**
+- **Database Mode (Default)**: Best for large vaults, persistent indexing, lower memory
+- **Memory Mode (`--use-memory`)**: Best for small vaults, faster search, development/testing
 
 ### Index Different Folders
 
