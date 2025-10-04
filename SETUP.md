@@ -134,8 +134,8 @@ After setup, you can verify the server is working by asking Claude:
 1. Verify your vault structure matches the expected layout
 2. Check that notes have proper frontmatter
 3. Look at console output when server starts (it shows indexed count and errors)
-4. Verify paths in `src/config.ts` are correct
-5. Check if files exceed `maxFileSize` limit (default 10MB)
+4. Verify `--index-patterns` in your MCP configuration are correct
+5. Check if files exceed `--max-file-size` limit (default 10MB)
 6. Large files will be skipped with a warning in the console
 
 ### Search returns no results
@@ -149,66 +149,90 @@ After setup, you can verify the server is working by asking Claude:
 
 ### Configuration Options
 
-Edit `src/config.ts` to customize the server behavior:
+All configuration can be done via CLI arguments in your `mcp.json` file. No need to edit source code!
 
-```typescript
-export const config: VaultConfig = {
-  vaultPath: '',  // Set via --vault-path CLI argument
+**Available CLI Arguments:**
 
-  // File size limit (default: 10MB)
-  maxFileSize: 10 * 1024 * 1024,
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `--vault-path` | string | **(required)** | Path to your Obsidian vault |
+| `--index-patterns` | string | `Work/**/*.md,Projects/**/*.md,Knowledge/**/*.md,Life/**/*.md,Dailies/**/*.md` | Comma-separated patterns to index |
+| `--exclude-patterns` | string | `Archive/**/*.md,_Meta/Attachments/**,.trash/**,node_modules/**,.git/**` | Comma-separated patterns to exclude |
+| `--metadata-fields` | string | `tags,type,status,category,created,modified` | Comma-separated frontmatter fields |
+| `--max-file-size` | number | `10485760` | Maximum file size in bytes (10MB) |
+| `--max-search-results` | number | `100` | Maximum search results to return |
+| `--max-recent-notes` | number | `100` | Maximum recent notes to return |
 
-  // Maximum results returned by search (default: 100)
-  maxSearchResults: 100,
+**Example with custom configuration:**
 
-  // Maximum recent notes returned (default: 100)
-  maxRecentNotes: 100,
-
-  // Search scoring weights
-  searchWeights: {
-    title: 3.0,      // Title match importance
-    tags: 2.5,       // Tag match importance
-    frontmatter: 2.0, // Metadata match importance
-    content: 1.0,    // Body content match importance
-    recency: 1.5     // Recent notes boost
+```json
+{
+  "mcpServers": {
+    "obsidian-sb": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@comfucios/obsidian-mcp-sb",
+        "--vault-path", "/Users/username/Documents/Vault",
+        "--index-patterns", "Work/**/*.md,Projects/**/*.md,Archive/**/*.md",
+        "--exclude-patterns", ".trash/**,node_modules/**",
+        "--max-search-results", "50",
+        "--max-file-size", "5242880"
+      ]
+    }
   }
-};
+}
 ```
 
 ### Performance Tuning
 
 **For large vaults (1000+ notes):**
-- Increase `maxFileSize` only if needed (uses more memory)
-- Decrease `maxSearchResults` for faster searches
-- Adjust `searchWeights` to prioritize metadata over content
+- Increase `--max-file-size` only if needed (uses more memory)
+- Decrease `--max-search-results` for faster searches
+- Use more specific `--index-patterns` to limit indexed notes
 
 **For small vaults (<100 notes):**
 - Can increase all limits safely
-- Consider higher content weight for better full-text search
+- Index all folders including archive if needed
 
 ### Index Different Folders
 
-Update `indexPatterns` in `src/config.ts`:
+Use the `--index-patterns` argument:
 
-```typescript
-indexPatterns: [
-  "Work/**/*.md",
-  "Projects/**/*.md",
-  "CustomFolder/**/*.md", // Add your folder
-];
+```json
+{
+  "mcpServers": {
+    "obsidian-sb": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@comfucios/obsidian-mcp-sb",
+        "--vault-path", "/path/to/vault",
+        "--index-patterns", "Work/**/*.md,Projects/**/*.md,CustomFolder/**/*.md"
+      ]
+    }
+  }
+}
 ```
 
 ### Exclude More Patterns
 
-Add to `excludePatterns` in `src/config.ts`:
+Use the `--exclude-patterns` argument:
 
-```typescript
-excludePatterns: [
-  "Archive/**/*.md",
-  "_Meta/Attachments/**",
-  ".trash/**",
-  "Private/**/*.md", // Add patterns to exclude
-];
+```json
+{
+  "mcpServers": {
+    "obsidian-sb": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@comfucios/obsidian-mcp-sb",
+        "--vault-path", "/path/to/vault",
+        "--exclude-patterns", "Archive/**/*.md,_Meta/**,.trash/**,Private/**/*.md"
+      ]
+    }
+  }
+}
 ```
 
 ## Development Mode

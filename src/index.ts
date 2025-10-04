@@ -8,7 +8,7 @@ import {
   Tool
 } from '@modelcontextprotocol/sdk/types.js';
 import { ObsidianVault } from './vault.js';
-import { config } from './config.js';
+import { defaultConfig } from './config.js';
 import { SearchOptions, VaultConfig, parseDate, isValidType, isValidStatus, isValidCategory, Note } from './types.js';
 import { existsSync, statSync, readFileSync } from 'fs';
 import { resolve, normalize, join, dirname } from 'path';
@@ -80,14 +80,28 @@ function validateConfig(cfg: VaultConfig): void {
   }
 }
 
-// Parse command line arguments for vault path
-const args = process.argv.slice(2);
-const vaultPathIndex = args.indexOf('--vault-path');
-const vaultPath = vaultPathIndex !== -1 && args[vaultPathIndex + 1]
-  ? args[vaultPathIndex + 1]
-  : config.vaultPath;
+/**
+ * Helper: Gets CLI argument value
+ */
+function getArg(args: string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  return index !== -1 && args[index + 1] ? args[index + 1] : undefined;
+}
 
-// Validate vault path
+/**
+ * Helper: Parses comma-separated string to array
+ */
+function parseArrayArg(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  return value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+}
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+
+// Get vault path (required)
+const vaultPath = getArg(args, '--vault-path');
+
 if (!vaultPath) {
   console.error('Error: Vault path is required. Please provide --vault-path argument.');
   console.error('Example: obsidian-mcp-sb --vault-path "/path/to/vault"');
@@ -107,10 +121,30 @@ if (!vaultStats.isDirectory()) {
   process.exit(1);
 }
 
-// Create custom config with validated vault path
+// Parse optional configuration arguments
+const indexPatterns = parseArrayArg(getArg(args, '--index-patterns')) ?? defaultConfig.indexPatterns!;
+const excludePatterns = parseArrayArg(getArg(args, '--exclude-patterns')) ?? defaultConfig.excludePatterns!;
+const metadataFields = parseArrayArg(getArg(args, '--metadata-fields')) ?? defaultConfig.metadataFields!;
+
+const maxFileSizeArg = getArg(args, '--max-file-size');
+const maxFileSize = maxFileSizeArg ? parseInt(maxFileSizeArg, 10) : defaultConfig.maxFileSize!;
+
+const maxSearchResultsArg = getArg(args, '--max-search-results');
+const maxSearchResults = maxSearchResultsArg ? parseInt(maxSearchResultsArg, 10) : defaultConfig.maxSearchResults!;
+
+const maxRecentNotesArg = getArg(args, '--max-recent-notes');
+const maxRecentNotes = maxRecentNotesArg ? parseInt(maxRecentNotesArg, 10) : defaultConfig.maxRecentNotes!;
+
+// Create configuration with CLI args and defaults
 const vaultConfig: VaultConfig = {
-  ...config,
-  vaultPath: resolvedVaultPath
+  vaultPath: resolvedVaultPath,
+  indexPatterns,
+  excludePatterns,
+  metadataFields,
+  maxFileSize,
+  maxSearchResults,
+  maxRecentNotes,
+  searchWeights: defaultConfig.searchWeights!
 };
 
 // Validate configuration

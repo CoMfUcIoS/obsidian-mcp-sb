@@ -61,24 +61,41 @@ The server automatically detects your vault structure based on the standardized 
 📁 _Meta/         - Vault management (excluded)
 ```
 
-Configuration can be customized in `src/config.ts`:
+### Configuration via MCP JSON
 
-```typescript
-export const config: VaultConfig = {
-  vaultPath: '',  // Set via --vault-path CLI argument
-  indexPatterns: ['Work/**/*.md', 'Projects/**/*.md', ...],
-  excludePatterns: ['Archive/**/*.md', '_Meta/Attachments/**', ...],
-  maxFileSize: 10 * 1024 * 1024,  // 10MB file size limit
-  maxSearchResults: 100,          // Maximum search results
-  maxRecentNotes: 100,            // Maximum recent notes
-  searchWeights: {
-    title: 3.0,
-    tags: 2.5,
-    frontmatter: 2.0,
-    content: 1.0,
-    recency: 1.5
+All configuration can be done directly in your MCP configuration file using CLI arguments. No need to modify source code!
+
+**Available CLI Arguments:**
+
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `--vault-path` | string | **(required)** | Path to your Obsidian vault |
+| `--index-patterns` | string | `Work/**/*.md,Projects/**/*.md,Knowledge/**/*.md,Life/**/*.md,Dailies/**/*.md` | Comma-separated patterns to index |
+| `--exclude-patterns` | string | `Archive/**/*.md,_Meta/Attachments/**,.trash/**,node_modules/**,.git/**` | Comma-separated patterns to exclude |
+| `--metadata-fields` | string | `tags,type,status,category,created,modified` | Comma-separated frontmatter fields |
+| `--max-file-size` | number | `10485760` | Maximum file size in bytes (10MB) |
+| `--max-search-results` | number | `100` | Maximum search results to return |
+| `--max-recent-notes` | number | `100` | Maximum recent notes to return |
+
+**Example with custom configuration:**
+
+```json
+{
+  "mcpServers": {
+    "obsidian-sb": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@comfucios/obsidian-mcp-sb",
+        "--vault-path", "/Users/username/Documents/Vault",
+        "--index-patterns", "Work/**/*.md,Projects/**/*.md,Archive/**/*.md",
+        "--exclude-patterns", ".trash/**,node_modules/**",
+        "--max-search-results", "50",
+        "--max-file-size", "5242880"
+      ]
+    }
   }
-};
+}
 ```
 
 ## MCP Tools

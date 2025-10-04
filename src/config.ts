@@ -1,9 +1,10 @@
 import { VaultConfig } from './types.js';
 
-export const config: VaultConfig = {
-  // Vault path must be provided via --vault-path CLI argument
-  // This ensures explicit configuration and prevents accidental indexing
-  vaultPath: '',
+/**
+ * Default configuration values
+ * These can be overridden via CLI arguments in mcp.json
+ */
+export const defaultConfig: Partial<VaultConfig> = {
   indexPatterns: [
     'Work/**/*.md',
     'Projects/**/*.md',
