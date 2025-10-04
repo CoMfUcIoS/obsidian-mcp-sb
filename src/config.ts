@@ -1,12 +1,9 @@
 import { VaultConfig } from './types.js';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 export const config: VaultConfig = {
-  vaultPath: join(__dirname, '../..'),
+  // Vault path must be provided via --vault-path CLI argument
+  // This ensures explicit configuration and prevents accidental indexing
+  vaultPath: '',
   indexPatterns: [
     'Work/**/*.md',
     'Projects/**/*.md',
@@ -18,7 +15,8 @@ export const config: VaultConfig = {
     'Archive/**/*.md',
     '_Meta/Attachments/**',
     '.trash/**',
-    'obsidian-mcp-sb/**'
+    'node_modules/**',
+    '.git/**'
   ],
   metadataFields: ['tags', 'type', 'status', 'category', 'created', 'modified'],
   searchWeights: {

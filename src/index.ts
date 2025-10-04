@@ -10,6 +10,48 @@ import {
 import { ObsidianVault } from './vault.js';
 import { config } from './config.js';
 import { SearchOptions, VaultConfig } from './types.js';
+import { existsSync, statSync } from 'fs';
+import { resolve, normalize, join } from 'path';
+
+/**
+ * Validates if a string is in YYYY-MM-DD format
+ */
+function isValidDateFormat(dateString: string): boolean {
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(dateString)) {
+    return false;
+  }
+
+  const date = new Date(dateString);
+  return !isNaN(date.getTime());
+}
+
+/**
+ * Formats a note summary for consistent response format
+ */
+interface NoteSummary {
+  path: string;
+  title: string;
+  excerpt?: string;
+  tags?: string[];
+  type?: string;
+  status?: string;
+  category?: string;
+  modified?: string;
+}
+
+function formatNoteSummary(note: any): NoteSummary {
+  return {
+    path: note.path,
+    title: note.title,
+    excerpt: note.excerpt,
+    tags: note.frontmatter.tags || [],
+    type: note.frontmatter.type,
+    status: note.frontmatter.status,
+    category: note.frontmatter.category,
+    modified: note.frontmatter.modified
+  };
+}
 
 // Parse command line arguments for vault path
 const args = process.argv.slice(2);
@@ -18,10 +60,30 @@ const vaultPath = vaultPathIndex !== -1 && args[vaultPathIndex + 1]
   ? args[vaultPathIndex + 1]
   : config.vaultPath;
 
-// Create custom config with provided vault path
+// Validate vault path
+if (!vaultPath) {
+  console.error('Error: Vault path is required. Please provide --vault-path argument.');
+  console.error('Example: obsidian-mcp-sb --vault-path "/path/to/vault"');
+  process.exit(1);
+}
+
+const resolvedVaultPath = resolve(vaultPath);
+
+if (!existsSync(resolvedVaultPath)) {
+  console.error(`Error: Vault path does not exist: ${resolvedVaultPath}`);
+  process.exit(1);
+}
+
+const vaultStats = statSync(resolvedVaultPath);
+if (!vaultStats.isDirectory()) {
+  console.error(`Error: Vault path is not a directory: ${resolvedVaultPath}`);
+  process.exit(1);
+}
+
+// Create custom config with validated vault path
 const vaultConfig: VaultConfig = {
   ...config,
-  vaultPath
+  vaultPath: resolvedVaultPath
 };
 
 const vault = new ObsidianVault(vaultConfig);
@@ -176,6 +238,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'search_notes': {
+        // Validate limit parameter
+        const limit = args?.limit as number | undefined;
+        if (limit !== undefined && (limit < 1 || limit > 100)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: Limit must be between 1 and 100'
+              }
+            ],
+            isError: true
+          };
+        }
+
+        // Validate date formats if provided
+        if (args?.dateFrom && !isValidDateFormat(args.dateFrom as string)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: dateFrom must be in YYYY-MM-DD format'
+              }
+            ],
+            isError: true
+          };
+        }
+
+        if (args?.dateTo && !isValidDateFormat(args.dateTo as string)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: dateTo must be in YYYY-MM-DD format'
+              }
+            ],
+            isError: true
+          };
+        }
+
         const options: SearchOptions = {
           tags: args?.tags as string[],
           type: args?.type as any,
@@ -183,7 +284,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           category: args?.category as any,
           dateFrom: args?.dateFrom as string,
           dateTo: args?.dateTo as string,
-          limit: args?.limit as number
+          limit: limit
         };
 
         const results = vault.searchNotes(args?.query as string || '', options);
@@ -192,33 +293,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(
-                results.map(note => ({
-                  path: note.path,
-                  title: note.title,
-                  excerpt: note.excerpt,
-                  tags: note.frontmatter.tags,
-                  type: note.frontmatter.type,
-                  status: note.frontmatter.status,
-                  category: note.frontmatter.category,
-                  modified: note.frontmatter.modified
-                })),
-                null,
-                2
-              )
+              text: JSON.stringify(results.map(formatNoteSummary), null, 2)
             }
           ]
         };
       }
 
       case 'get_note': {
-        const note = vault.getNote(args?.path as string);
+        const requestedPath = args?.path as string;
+
+        if (!requestedPath) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: Path parameter is required'
+              }
+            ],
+            isError: true
+          };
+        }
+
+        // Sanitize path to prevent directory traversal
+        const normalizedPath = normalize(requestedPath).replace(/^(\.\.(\/|\\|$))+/, '');
+        const fullPath = resolve(vaultConfig.vaultPath, normalizedPath);
+
+        // Ensure the resolved path is within the vault
+        if (!fullPath.startsWith(vaultConfig.vaultPath)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: Access denied. Path is outside vault directory.'
+              }
+            ],
+            isError: true
+          };
+        }
+
+        const note = vault.getNote(normalizedPath);
         if (!note) {
           return {
             content: [
               {
                 type: 'text',
-                text: `Note not found: ${args?.path}`
+                text: `Note not found: ${normalizedPath}`
               }
             ],
             isError: true
@@ -236,22 +355,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_notes_by_tag': {
-        const notes = vault.getNotesByTag(args?.tag as string);
+        const tag = args?.tag as string;
+
+        if (!tag) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: Tag parameter is required'
+              }
+            ],
+            isError: true
+          };
+        }
+
+        const notes = vault.getNotesByTag(tag);
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(
-                notes.map(note => ({
-                  path: note.path,
-                  title: note.title,
-                  excerpt: note.excerpt,
-                  tags: note.frontmatter.tags,
-                  modified: note.frontmatter.modified
-                })),
-                null,
-                2
-              )
+              text: JSON.stringify(notes.map(formatNoteSummary), null, 2)
             }
           ]
         };
@@ -259,22 +382,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'get_recent_notes': {
         const limit = (args?.limit as number) || 10;
+
+        if (limit < 1 || limit > 100) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: Limit must be between 1 and 100'
+              }
+            ],
+            isError: true
+          };
+        }
+
         const notes = vault.getRecentNotes(limit);
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(
-                notes.map(note => ({
-                  path: note.path,
-                  title: note.title,
-                  excerpt: note.excerpt,
-                  tags: note.frontmatter.tags,
-                  modified: note.frontmatter.modified
-                })),
-                null,
-                2
-              )
+              text: JSON.stringify(notes.map(formatNoteSummary), null, 2)
             }
           ]
         };
@@ -321,9 +447,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
         notes.forEach(note => {
-          summary.byType[note.frontmatter.type] = (summary.byType[note.frontmatter.type] || 0) + 1;
-          summary.byStatus[note.frontmatter.status] = (summary.byStatus[note.frontmatter.status] || 0) + 1;
-          summary.byCategory[note.frontmatter.category] = (summary.byCategory[note.frontmatter.category] || 0) + 1;
+          if (note.frontmatter.type) {
+            summary.byType[note.frontmatter.type] = (summary.byType[note.frontmatter.type] || 0) + 1;
+          }
+          if (note.frontmatter.status) {
+            summary.byStatus[note.frontmatter.status] = (summary.byStatus[note.frontmatter.status] || 0) + 1;
+          }
+          if (note.frontmatter.category) {
+            summary.byCategory[note.frontmatter.category] = (summary.byCategory[note.frontmatter.category] || 0) + 1;
+          }
         });
 
         return {
@@ -361,18 +493,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function main() {
-  console.error(`Initializing Obsidian MCP Server...`);
-  console.error(`Vault path: ${vaultPath}`);
+  try {
+    console.error(`Initializing Obsidian MCP Server...`);
+    console.error(`Vault path: ${resolvedVaultPath}`);
 
-  await vault.initialize();
+    await vault.initialize();
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
 
-  console.error('Obsidian MCP Server running on stdio');
+    console.error('Obsidian MCP Server running on stdio');
+  } catch (error) {
+    console.error('Fatal error during initialization:');
+    console.error(error instanceof Error ? error.message : String(error));
+    if (error instanceof Error && error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
+    process.exit(1);
+  }
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  console.error('Unhandled error in main:');
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
