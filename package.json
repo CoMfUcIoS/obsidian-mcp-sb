@@ -20,6 +20,11 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -37,7 +42,7 @@
   "engines": {
     "node": ">=22.12"
   },
-  "packageManager": "npm@11",
+  "packageManager": "npm@11.0.0",
   "files": [
     "dist",
     "README.md",
@@ -45,12 +50,18 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "gray-matter": "^4.0.3",
+    "fuse.js": "^7.0.0",
     "glob": "^11.0.0",
-    "fuse.js": "^7.0.0"
+    "gray-matter": "^4.0.3"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.45.0",
+    "@typescript-eslint/parser": "^8.45.0",
+    "eslint": "^9.37.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.4",
     "typescript": "^5.7.2"
   }
 }

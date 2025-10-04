@@ -1,9 +1,9 @@
-import { readFile } from 'fs/promises';
+import { readFile, stat } from 'fs/promises';
 import { glob } from 'glob';
 import matter from 'gray-matter';
-import { basename, join } from 'path';
+import { basename, relative } from 'path';
 import Fuse from 'fuse.js';
-import { Note, SearchOptions, VaultConfig } from './types.js';
+import { Note, SearchOptions, VaultConfig, parseDate, isValidType, isValidStatus, isValidCategory, NoteFrontmatter } from './types.js';
 
 /**
  * Manages indexing and searching of an Obsidian vault
@@ -12,6 +12,7 @@ export class ObsidianVault {
   private notes: Note[] = [];
   private fuse: Fuse<Note> | null = null;
   private config: VaultConfig;
+  private indexErrors: Array<{ path: string; error: string }> = [];
 
   constructor(config: VaultConfig) {
     this.config = config;
@@ -24,9 +25,18 @@ export class ObsidianVault {
   async initialize(): Promise<void> {
     try {
       console.error('Initializing Obsidian vault...');
+      this.indexErrors = []; // Reset errors
       await this.indexNotes();
       this.initializeSearch();
       console.error(`Indexed ${this.notes.length} notes`);
+
+      if (this.indexErrors.length > 0) {
+        console.error(`Warning: ${this.indexErrors.length} file(s) failed to index`);
+        // Log first few errors for debugging
+        this.indexErrors.slice(0, 5).forEach(err => {
+          console.error(`  - ${err.path}: ${err.error}`);
+        });
+      }
     } catch (error) {
       console.error('Failed to initialize vault:', error instanceof Error ? error.message : String(error));
       throw new Error(`Vault initialization failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -56,32 +66,47 @@ export class ObsidianVault {
     const notesWithPossibleNulls = await Promise.all(
       files.map(async (filePath) => {
         try {
+          // Check file size before reading
+          const fileStats = await stat(filePath);
+          if (fileStats.size > this.config.maxFileSize) {
+            this.indexErrors.push({
+              path: filePath,
+              error: `File too large (${Math.round(fileStats.size / 1024 / 1024)}MB, max ${Math.round(this.config.maxFileSize / 1024 / 1024)}MB)`
+            });
+            return null;
+          }
+
           const content = await readFile(filePath, 'utf-8');
           const { data, content: markdownContent } = matter(content);
 
           const title = basename(filePath, '.md');
           const excerpt = this.createExcerpt(markdownContent);
 
-          // Provide safe defaults for missing frontmatter fields
-          const frontmatter: any = {
-            created: data.created || '',
-            modified: data.modified || '',
-            tags: Array.isArray(data.tags) ? data.tags : [],
-            type: data.type || 'note',
-            status: data.status || 'active',
-            category: data.category || 'personal',
-            ...data
+          // Provide safe defaults for missing frontmatter fields with validation
+          const { created, modified, tags, type, status, category, ...rest } = data;
+          const frontmatter: NoteFrontmatter = {
+            created: typeof created === 'string' ? created : '',
+            modified: typeof modified === 'string' ? modified : '',
+            tags: Array.isArray(tags) ? tags : [],
+            type: isValidType(type) ? type : 'note',
+            status: isValidStatus(status) ? status : 'active',
+            category: isValidCategory(category) ? category : 'personal',
+            ...rest // Add other custom fields after validation
           };
 
+          // Use path.relative for secure path handling
+          const relativePath = relative(this.config.vaultPath, filePath);
+
           return {
-            path: filePath.replace(this.config.vaultPath + '/', ''),
+            path: relativePath,
             title,
             content: markdownContent,
             frontmatter,
             excerpt
           } as Note;
         } catch (error) {
-          console.error(`Error reading ${filePath}:`, error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          this.indexErrors.push({ path: filePath, error: errorMessage });
           return null;
         }
       })
@@ -91,7 +116,11 @@ export class ObsidianVault {
   }
 
   private createExcerpt(content: string, length: number = 200): string {
-    let cleanContent = content
+    // Pre-slice to avoid processing entire large files
+    const maxProcessLength = length * 3;
+    const contentToProcess = content.length > maxProcessLength ? content.slice(0, maxProcessLength) : content;
+
+    const cleanContent = contentToProcess
       // Remove code blocks
       .replace(/```[\s\S]*?```/g, '')
       // Remove inline code
@@ -99,7 +128,7 @@ export class ObsidianVault {
       // Remove images
       .replace(/!\[.*?\]\(.*?\)/g, '')
       // Remove links but keep text
-      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       // Remove wiki links but keep text
       .replace(/\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, '$1')
       // Remove headers
@@ -120,22 +149,6 @@ export class ObsidianVault {
       .trim();
 
     return cleanContent.slice(0, length) + (cleanContent.length > length ? '...' : '');
-  }
-
-  /**
-   * Parses a date string and returns a Date object, or null if invalid.
-   * Supports formats: YYYY-MM-DD, YYYY-MM-DDTHH:mm:ss, ISO 8601
-   */
-  private parseDate(dateString: string): Date | null {
-    if (!dateString) return null;
-
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      console.error(`Invalid date format: ${dateString}`);
-      return null;
-    }
-
-    return date;
   }
 
   /**
@@ -243,20 +256,20 @@ export class ObsidianVault {
     }
 
     if (options.dateFrom) {
-      const fromDate = this.parseDate(options.dateFrom);
+      const fromDate = parseDate(options.dateFrom);
       if (fromDate) {
         filtered = filtered.filter(note => {
-          const noteDate = this.parseDate(note.frontmatter.modified || '');
+          const noteDate = parseDate(note.frontmatter.modified || '');
           return noteDate && noteDate >= fromDate;
         });
       }
     }
 
     if (options.dateTo) {
-      const toDate = this.parseDate(options.dateTo);
+      const toDate = parseDate(options.dateTo);
       if (toDate) {
         filtered = filtered.filter(note => {
-          const noteDate = this.parseDate(note.frontmatter.modified || '');
+          const noteDate = parseDate(note.frontmatter.modified || '');
           return noteDate && noteDate <= toDate;
         });
       }

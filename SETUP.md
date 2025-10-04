@@ -133,8 +133,10 @@ After setup, you can verify the server is working by asking Claude:
 
 1. Verify your vault structure matches the expected layout
 2. Check that notes have proper frontmatter
-3. Look at console output when server starts (it shows indexed count)
+3. Look at console output when server starts (it shows indexed count and errors)
 4. Verify paths in `src/config.ts` are correct
+5. Check if files exceed `maxFileSize` limit (default 10MB)
+6. Large files will be skipped with a warning in the console
 
 ### Search returns no results
 
@@ -145,30 +147,44 @@ After setup, you can verify the server is working by asking Claude:
 
 ## Advanced Configuration
 
-### Custom Vault Path
+### Configuration Options
 
-Edit `src/config.ts` and change the `vaultPath`:
+Edit `src/config.ts` to customize the server behavior:
 
 ```typescript
 export const config: VaultConfig = {
-  vaultPath: "/path/to/your/vault",
-  // ...
+  vaultPath: '',  // Set via --vault-path CLI argument
+
+  // File size limit (default: 10MB)
+  maxFileSize: 10 * 1024 * 1024,
+
+  // Maximum results returned by search (default: 100)
+  maxSearchResults: 100,
+
+  // Maximum recent notes returned (default: 100)
+  maxRecentNotes: 100,
+
+  // Search scoring weights
+  searchWeights: {
+    title: 3.0,      // Title match importance
+    tags: 2.5,       // Tag match importance
+    frontmatter: 2.0, // Metadata match importance
+    content: 1.0,    // Body content match importance
+    recency: 1.5     // Recent notes boost
+  }
 };
 ```
 
-### Adjust Search Weights
+### Performance Tuning
 
-Modify search scoring in `src/config.ts`:
+**For large vaults (1000+ notes):**
+- Increase `maxFileSize` only if needed (uses more memory)
+- Decrease `maxSearchResults` for faster searches
+- Adjust `searchWeights` to prioritize metadata over content
 
-```typescript
-searchWeights: {
-  title: 3.0,      // Title importance
-  tags: 2.5,       // Tag matching importance
-  frontmatter: 2.0,
-  content: 1.0,    // Body content importance
-  recency: 1.5     // Recent notes boost
-}
-```
+**For small vaults (<100 notes):**
+- Can increase all limits safely
+- Consider higher content weight for better full-text search
 
 ### Index Different Folders
 
@@ -205,7 +221,49 @@ npm run watch
 
 This will watch for file changes and rebuild automatically.
 
+## Testing
+
+The project includes comprehensive unit tests:
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+```
+
+Tests cover:
+- Date parsing and validation
+- Enum validation (type, status, category)
+- Path security (traversal protection)
+- File size limits
+- Tag matching (hierarchical)
+- Frontmatter validation
+
+## Code Quality
+
+Maintain code quality with linting:
+
+```bash
+# Check for lint errors
+npm run lint
+
+# Auto-fix lint issues
+npm run lint:fix
+```
+
+The project enforces:
+- No explicit `any` types
+- TypeScript strict mode
+- Consistent code style
+- Test coverage for new features
+
 ## Next Steps
 
 - Read the full [README.md](README.md) for all available tools
+- Check out the [Security Features](#security-features) section
 - Start using natural language queries with Claude Code!

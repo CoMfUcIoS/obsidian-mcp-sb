@@ -9,21 +9,30 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { ObsidianVault } from './vault.js';
 import { config } from './config.js';
-import { SearchOptions, VaultConfig } from './types.js';
-import { existsSync, statSync } from 'fs';
-import { resolve, normalize, join } from 'path';
+import { SearchOptions, VaultConfig, parseDate, isValidType, isValidStatus, isValidCategory, Note } from './types.js';
+import { existsSync, statSync, readFileSync } from 'fs';
+import { resolve, normalize, join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Validates if a string is in YYYY-MM-DD format
+ * Helper: Creates standardized error response
  */
-function isValidDateFormat(dateString: string): boolean {
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dateRegex.test(dateString)) {
-    return false;
-  }
+function createErrorResponse(message: string) {
+  return {
+    content: [{ type: 'text' as const, text: `Error: ${message}` }],
+    isError: true
+  };
+}
 
-  const date = new Date(dateString);
-  return !isNaN(date.getTime());
+/**
+ * Helper: Creates standardized success response
+ */
+function createSuccessResponse(data: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }]
+  };
 }
 
 /**
@@ -40,7 +49,7 @@ interface NoteSummary {
   modified?: string;
 }
 
-function formatNoteSummary(note: any): NoteSummary {
+function formatNoteSummary(note: Note): NoteSummary {
   return {
     path: note.path,
     title: note.title,
@@ -51,6 +60,24 @@ function formatNoteSummary(note: any): NoteSummary {
     category: note.frontmatter.category,
     modified: note.frontmatter.modified
   };
+}
+
+/**
+ * Helper: Validates configuration
+ */
+function validateConfig(cfg: VaultConfig): void {
+  if (!cfg.indexPatterns || cfg.indexPatterns.length === 0) {
+    throw new Error('Config must have at least one index pattern');
+  }
+  if (cfg.maxSearchResults < 1) {
+    throw new Error('maxSearchResults must be >= 1');
+  }
+  if (cfg.maxRecentNotes < 1) {
+    throw new Error('maxRecentNotes must be >= 1');
+  }
+  if (cfg.maxFileSize < 1) {
+    throw new Error('maxFileSize must be >= 1');
+  }
 }
 
 // Parse command line arguments for vault path
@@ -86,12 +113,20 @@ const vaultConfig: VaultConfig = {
   vaultPath: resolvedVaultPath
 };
 
+// Validate configuration
+validateConfig(vaultConfig);
+
 const vault = new ObsidianVault(vaultConfig);
+
+// Read version from package.json
+const packageJson = JSON.parse(
+  readFileSync(join(__dirname, '../package.json'), 'utf-8')
+);
 
 const server = new Server(
   {
     name: 'obsidian-mcp-sb',
-    version: '1.0.0'
+    version: packageJson.version
   },
   {
     capabilities: {
@@ -249,80 +284,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'search_notes': {
         // Validate limit parameter
         const limit = args?.limit as number | undefined;
-        if (limit !== undefined && (limit < 1 || limit > 100)) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Error: Limit must be between 1 and 100'
-              }
-            ],
-            isError: true
-          };
+        if (limit !== undefined && (limit < 1 || limit > vaultConfig.maxSearchResults)) {
+          return createErrorResponse(`Limit must be between 1 and ${vaultConfig.maxSearchResults}`);
+        }
+
+        // Validate type enum if provided
+        if (args?.type !== undefined && !isValidType(args.type)) {
+          return createErrorResponse('Invalid type. Must be one of: note, project, task, daily, meeting');
+        }
+
+        // Validate status enum if provided
+        if (args?.status !== undefined && !isValidStatus(args.status)) {
+          return createErrorResponse('Invalid status. Must be one of: active, archived, idea, completed');
+        }
+
+        // Validate category enum if provided
+        if (args?.category !== undefined && !isValidCategory(args.category)) {
+          return createErrorResponse('Invalid category. Must be one of: work, personal, knowledge, life, dailies');
         }
 
         // Validate date formats if provided
-        if (args?.dateFrom && !isValidDateFormat(args.dateFrom as string)) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Error: dateFrom must be in YYYY-MM-DD format'
-              }
-            ],
-            isError: true
-          };
+        if (args?.dateFrom && !parseDate(args.dateFrom as string)) {
+          return createErrorResponse('dateFrom must be in YYYY-MM-DD format');
         }
 
-        if (args?.dateTo && !isValidDateFormat(args.dateTo as string)) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Error: dateTo must be in YYYY-MM-DD format'
-              }
-            ],
-            isError: true
-          };
+        if (args?.dateTo && !parseDate(args.dateTo as string)) {
+          return createErrorResponse('dateTo must be in YYYY-MM-DD format');
         }
 
         const options: SearchOptions = {
-          tags: args?.tags as string[],
-          type: args?.type as any,
-          status: args?.status as any,
-          category: args?.category as any,
-          dateFrom: args?.dateFrom as string,
-          dateTo: args?.dateTo as string,
-          path: args?.path as string,
-          includeArchive: args?.includeArchive as boolean,
+          tags: Array.isArray(args?.tags) ? args.tags as string[] : undefined,
+          type: args?.type as typeof options.type,
+          status: args?.status as typeof options.status,
+          category: args?.category as typeof options.category,
+          dateFrom: args?.dateFrom as string | undefined,
+          dateTo: args?.dateTo as string | undefined,
+          path: typeof args?.path === 'string' ? args.path : undefined,
+          includeArchive: typeof args?.includeArchive === 'boolean' ? args.includeArchive : undefined,
           limit: limit
         };
 
-        const results = vault.searchNotes(args?.query as string || '', options);
+        const results = vault.searchNotes(
+          typeof args?.query === 'string' ? args.query : '',
+          options
+        );
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(results.map(formatNoteSummary), null, 2)
-            }
-          ]
-        };
+        return createSuccessResponse(results.map(formatNoteSummary));
       }
 
       case 'get_note': {
-        const requestedPath = args?.path as string;
+        const requestedPath = args?.path;
 
-        if (!requestedPath) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Error: Path parameter is required'
-              }
-            ],
-            isError: true
-          };
+        if (!requestedPath || typeof requestedPath !== 'string') {
+          return createErrorResponse('Path parameter is required and must be a string');
         }
 
         // Sanitize path to prevent directory traversal
@@ -331,90 +345,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Ensure the resolved path is within the vault
         if (!fullPath.startsWith(vaultConfig.vaultPath)) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Error: Access denied. Path is outside vault directory.'
-              }
-            ],
-            isError: true
-          };
+          return createErrorResponse('Access denied. Path is outside vault directory');
         }
 
         const note = vault.getNote(normalizedPath);
         if (!note) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Note not found: ${normalizedPath}`
-              }
-            ],
-            isError: true
-          };
+          return createErrorResponse(`Note not found: ${normalizedPath}`);
         }
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(note, null, 2)
-            }
-          ]
-        };
+        return createSuccessResponse(note);
       }
 
       case 'get_notes_by_tag': {
-        const tag = args?.tag as string;
+        const tag = args?.tag;
 
-        if (!tag) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Error: Tag parameter is required'
-              }
-            ],
-            isError: true
-          };
+        if (!tag || typeof tag !== 'string') {
+          return createErrorResponse('Tag parameter is required and must be a string');
         }
 
         const notes = vault.getNotesByTag(tag);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(notes.map(formatNoteSummary), null, 2)
-            }
-          ]
-        };
+        return createSuccessResponse(notes.map(formatNoteSummary));
       }
 
       case 'get_recent_notes': {
-        const limit = (args?.limit as number) || 10;
+        const limit = typeof args?.limit === 'number' ? args.limit : 10;
 
-        if (limit < 1 || limit > 100) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Error: Limit must be between 1 and 100'
-              }
-            ],
-            isError: true
-          };
+        if (limit < 1 || limit > vaultConfig.maxRecentNotes) {
+          return createErrorResponse(`Limit must be between 1 and ${vaultConfig.maxRecentNotes}`);
         }
 
         const notes = vault.getRecentNotes(limit);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(notes.map(formatNoteSummary), null, 2)
-            }
-          ]
-        };
+        return createSuccessResponse(notes.map(formatNoteSummary));
       }
 
       case 'list_tags': {
@@ -425,22 +386,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         const sortedTags = Array.from(tagSet).sort();
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(sortedTags, null, 2)
-            }
-          ]
-        };
+        return createSuccessResponse(sortedTags);
       }
 
       case 'summarize_notes': {
+        // Validate enum arguments if provided
+        if (args?.type !== undefined && !isValidType(args.type)) {
+          return createErrorResponse('Invalid type. Must be one of: note, project, task, daily, meeting');
+        }
+        if (args?.status !== undefined && !isValidStatus(args.status)) {
+          return createErrorResponse('Invalid status. Must be one of: active, archived, idea, completed');
+        }
+        if (args?.category !== undefined && !isValidCategory(args.category)) {
+          return createErrorResponse('Invalid category. Must be one of: work, personal, knowledge, life, dailies');
+        }
+
         const options: SearchOptions = {
-          tags: args?.tags as string[],
-          type: args?.type as any,
-          status: args?.status as any,
-          category: args?.category as any
+          tags: Array.isArray(args?.tags) ? args.tags as string[] : undefined,
+          type: args?.type as typeof options.type,
+          status: args?.status as typeof options.status,
+          category: args?.category as typeof options.category
         };
 
         const notes = vault.searchNotes('', options);
@@ -469,37 +434,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
         });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(summary, null, 2)
-            }
-          ]
-        };
+        return createSuccessResponse(summary);
       }
 
       default:
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Unknown tool: ${name}`
-            }
-          ],
-          isError: true
-        };
+        return createErrorResponse(`Unknown tool: ${name}`);
     }
   } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`
-        }
-      ],
-      isError: true
-    };
+    return createErrorResponse(error instanceof Error ? error.message : String(error));
   }
 });
 

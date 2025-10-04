@@ -13,6 +13,7 @@ An MCP (Model Context Protocol) server that provides intelligent **read-only** a
 - **Smart Summarization**: Generate summaries of note collections
 - **Recent Notes**: Quick access to recently modified notes
 - **Archive Control**: Optionally include archived notes in searches
+- **Security**: Path traversal protection, file size limits, input validation
 
 ## Read-Only Design
 
@@ -60,7 +61,25 @@ The server automatically detects your vault structure based on the standardized 
 📁 _Meta/         - Vault management (excluded)
 ```
 
-Configuration can be customized in `src/config.ts`.
+Configuration can be customized in `src/config.ts`:
+
+```typescript
+export const config: VaultConfig = {
+  vaultPath: '',  // Set via --vault-path CLI argument
+  indexPatterns: ['Work/**/*.md', 'Projects/**/*.md', ...],
+  excludePatterns: ['Archive/**/*.md', '_Meta/Attachments/**', ...],
+  maxFileSize: 10 * 1024 * 1024,  // 10MB file size limit
+  maxSearchResults: 100,          // Maximum search results
+  maxRecentNotes: 100,            // Maximum recent notes
+  searchWeights: {
+    title: 3.0,
+    tags: 2.5,
+    frontmatter: 2.0,
+    content: 1.0,
+    recency: 1.5
+  }
+};
+```
 
 ## MCP Tools
 
@@ -73,11 +92,11 @@ Search notes with optional filters.
 - `type` (enum, optional): `note`, `project`, `task`, `daily`, `meeting`
 - `status` (enum, optional): `active`, `archived`, `idea`, `completed`
 - `category` (enum, optional): `work`, `personal`, `knowledge`, `life`, `dailies`
-- `dateFrom` (string, optional): Start date (YYYY-MM-DD)
-- `dateTo` (string, optional): End date (YYYY-MM-DD)
+- `dateFrom` (string, optional): Start date (YYYY-MM-DD format, validated)
+- `dateTo` (string, optional): End date (YYYY-MM-DD format, validated)
 - `path` (string, optional): Filter by directory pattern (e.g., `"Work/Puppet/**"`)
 - `includeArchive` (boolean, optional): Include archived notes (default: false)
-- `limit` (number, optional): Max results (default: 20)
+- `limit` (number, optional): Max results (default: 20, max: configurable via `maxSearchResults`)
 
 **Examples:**
 ```json
@@ -120,7 +139,7 @@ Get all notes with a specific tag.
 Get recently modified notes.
 
 **Parameters:**
-- `limit` (number, optional): Number of notes (default: 10)
+- `limit` (number, optional): Number of notes (default: 10, max: configurable via `maxRecentNotes`)
 
 ### 5. `list_tags`
 List all unique tags across the vault.
@@ -301,10 +320,23 @@ The server uses weighted search scoring for semantic search:
 
 This means searching for "meeting" will match notes with `type: meeting` higher than notes containing "meeting" in their content.
 
+## Security Features
+
+This server implements multiple security measures:
+
+- **Path Traversal Protection**: All file paths are validated using `path.relative()` to ensure they remain within the vault directory
+- **File Size Limits**: Files exceeding `maxFileSize` (default 10MB) are skipped during indexing to prevent memory issues
+- **Input Validation**: All enum parameters (type, status, category) are strictly validated
+- **Date Validation**: Date strings are validated for format and actual date validity (e.g., rejects Feb 30)
+- **Error Tracking**: Failed file reads are logged without exposing sensitive system paths
+
 ## Development
 
 ```bash
-# Watch mode
+# Install dependencies
+npm install
+
+# Watch mode (auto-rebuild on changes)
 npm run watch
 
 # Build
@@ -312,21 +344,51 @@ npm run build
 
 # Start server
 npm start
+
+# Run tests
+npm test
+
+# Run tests with coverage
+npm test:coverage
+
+# Lint code
+npm run lint
+
+# Auto-fix lint issues
+npm run lint:fix
 ```
+
+## Contributing
+
+When contributing to this project:
+
+1. **Write tests** for new features in `src/__tests__/`
+2. **Run linting** with `npm run lint` before committing
+3. **Ensure all tests pass** with `npm test`
+4. **Update documentation** if adding/changing features
+5. **Follow TypeScript strict mode** - no `any` types allowed
 
 ## Architecture
 
-- **`src/index.ts`**: MCP server implementation
-- **`src/vault.ts`**: Vault indexing and search logic
-- **`src/config.ts`**: Configuration management
-- **`src/types.ts`**: TypeScript type definitions
+- **`src/index.ts`**: MCP server implementation with tool handlers
+- **`src/vault.ts`**: Vault indexing, search logic, and security controls
+- **`src/config.ts`**: Configuration management with defaults
+- **`src/types.ts`**: TypeScript type definitions and validation utilities
+- **`src/__tests__/`**: Unit tests for critical functionality
 
 ## Dependencies
 
+**Production:**
 - `@modelcontextprotocol/sdk`: MCP protocol implementation
 - `gray-matter`: YAML frontmatter parsing
-- `glob`: File pattern matching
+- `glob`: File pattern matching for vault indexing
 - `fuse.js`: Fuzzy search functionality
+
+**Development:**
+- `typescript`: Type safety and compilation
+- `eslint`: Code linting with TypeScript support
+- `jest`: Testing framework with TypeScript integration
+- `ts-jest`: Jest TypeScript preprocessor
 
 ## License
 

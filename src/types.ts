@@ -15,7 +15,7 @@ export interface NoteFrontmatter {
   /** Category for organizational purposes */
   category?: 'work' | 'personal' | 'knowledge' | 'life' | 'dailies';
   /** Allow additional custom frontmatter fields */
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
@@ -70,6 +70,12 @@ export interface VaultConfig {
   excludePatterns: string[];
   /** Metadata fields to extract from frontmatter */
   metadataFields: string[];
+  /** Maximum file size to index in bytes (default: 10MB) */
+  maxFileSize: number;
+  /** Maximum number of search results (default: 100) */
+  maxSearchResults: number;
+  /** Maximum number of recent notes (default: 100) */
+  maxRecentNotes: number;
   /** Search scoring weights */
   searchWeights: {
     /** Weight for title matches */
@@ -83,4 +89,60 @@ export interface VaultConfig {
     /** Weight boost for recent notes */
     recency: number;
   };
+}
+
+/**
+ * Utility: Parses and validates a date string in YYYY-MM-DD format
+ * @param dateString - Date string to parse
+ * @returns Date object if valid, null otherwise
+ */
+export function parseDate(dateString: string): Date | null {
+  if (!dateString) return null;
+
+  // Validate YYYY-MM-DD format
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(dateString)) {
+    return null;
+  }
+
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) {
+    return null;
+  }
+
+  // Verify the date components match the input (catches invalid dates like Feb 30)
+  const [year, month, day] = dateString.split('-').map(Number);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+/**
+ * Utility: Validates if a value is a valid note type
+ */
+export function isValidType(value: unknown): value is NoteFrontmatter['type'] {
+  return typeof value === 'string' &&
+    ['note', 'project', 'task', 'daily', 'meeting'].includes(value);
+}
+
+/**
+ * Utility: Validates if a value is a valid note status
+ */
+export function isValidStatus(value: unknown): value is NoteFrontmatter['status'] {
+  return typeof value === 'string' &&
+    ['active', 'archived', 'idea', 'completed'].includes(value);
+}
+
+/**
+ * Utility: Validates if a value is a valid note category
+ */
+export function isValidCategory(value: unknown): value is NoteFrontmatter['category'] {
+  return typeof value === 'string' &&
+    ['work', 'personal', 'knowledge', 'life', 'dailies'].includes(value);
 }

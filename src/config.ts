@@ -19,6 +19,9 @@ export const config: VaultConfig = {
     '.git/**'
   ],
   metadataFields: ['tags', 'type', 'status', 'category', 'created', 'modified'],
+  maxFileSize: 10 * 1024 * 1024, // 10MB
+  maxSearchResults: 100,
+  maxRecentNotes: 100,
   searchWeights: {
     title: 3.0,
     tags: 2.5,

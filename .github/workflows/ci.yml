@@ -26,6 +26,10 @@ jobs:
         run: npm ci
       - name: Build project
         run: npm run build
+      - name: Run tests
+        run: npm test
+      - name: Lint code
+        run: npm run lint
       - name: Validate server startup
         run: |
           timeout 10s npm start -- --vault-path ./ || exit_code=$?
