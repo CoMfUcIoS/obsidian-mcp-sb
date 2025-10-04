@@ -1,13 +1,18 @@
 {
   "name": "@comfucios/obsidian-mcp-sb",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "description": "MCP server for Obsidian vault as a second brain",
   "main": "dist/index.js",
+  "author": "Ioannis Karasavvaidis <ioannis@studio110.eu>",
+  "license": "ISC",
   "type": "module",
   "repository": {
-    "type": "git",
-    "url": "https://github.com/comfucios/obsidian-mcp-sb"
+    "url": "https://github.com/CoMfUcIoS/obsidian-mcp-sb"
   },
+  "bugs": {
+    "url": "https://github.com/CoMfUcIoS/obsidian-mcp-sb/issues"
+  },
+  "homepage": "https://github.com/CoMfUcIoS/obsidian-mcp-sb#readme",
   "bin": {
     "obsidian-mcp-sb": "dist/index.js"
   },
@@ -21,10 +26,18 @@
     "mcp",
     "obsidian",
     "second-brain",
-    "knowledge-management"
+    "knowledge-management",
+    "ai",
+    "openai",
+    "claude",
+    "vscode",
+    "copilot",
+    "cursor"
   ],
-  "author": "",
-  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "packageManager": "npm@11",
   "files": [
     "dist",
     "README.md",
