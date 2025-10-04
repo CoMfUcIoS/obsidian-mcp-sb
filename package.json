@@ -1,6 +1,6 @@
 {
   "name": "@comfucios/obsidian-mcp-sb",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "MCP server for Obsidian vault as a second brain",
   "main": "dist/index.js",
   "type": "module",
@@ -13,7 +13,12 @@
     "start": "node dist/index.js",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["mcp", "obsidian", "second-brain", "knowledge-management"],
+  "keywords": [
+    "mcp",
+    "obsidian",
+    "second-brain",
+    "knowledge-management"
+  ],
   "author": "",
   "license": "MIT",
   "files": [
