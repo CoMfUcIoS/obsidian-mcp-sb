@@ -2,26 +2,6 @@
 
 A read-only MCP server for intelligent, secure access to your Obsidian vault—enabling semantic search, metadata filtering, and more for LLMs.
 
-## Documentation
-
-See [docs/README.md](docs/README.md) for:
-
-- API Reference
-- Configuration & CLI Options
-- Example Queries
-- Development & Storage Architecture
-- Contributing
-- Dependencies
-- Architecture & Database Schema
-- Security & Search
-- [Example Queries](#example-queries)
-- [Development](#development)
-- [Contributing](#contributing)
-- [Dependencies](#dependencies)
-- [License](#license)
-
-An MCP (Model Context Protocol) server that provides intelligent **read-only** access to your Obsidian vault, enabling it to function as a "second brain" for LLMs.
-
 ## Features
 
 - **Efficient Database Storage**: SQLite-based indexing for large vaults with persistent caching
@@ -189,7 +169,23 @@ If you're developing locally with `npm link`:
 
 See [docs/examples.md](docs/examples.md) for more example queries.
 
-## Frontmatter Requirements
+## Documentation
+
+See [docs/README.md](docs/README.md) for:
+
+- API Reference
+- Configuration & CLI Options
+- Example Queries
+- Development & Storage Architecture
+- Contributing
+- Dependencies
+- Architecture & Database Schema
+- Security & Search
+- Example Queries
+- Development
+- Contributing
+- Dependencies
+- [License](#license)
 
 ## Quick Start
 
@@ -214,8 +210,6 @@ See [docs/configuration.md](docs/configuration.md#troubleshooting--faq) for comm
 See [docs/search.md](docs/search.md) for details on search weights and scoring.
 
 See [docs/security.md](docs/security.md) for details on security features and protections.
-
-npm run watch
 
 See [docs/development.md](docs/development.md) for development workflow and storage details.
 
