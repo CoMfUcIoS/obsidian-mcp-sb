@@ -1,9 +1,9 @@
-
 # Documentation Overview
 
 Welcome! This folder contains detailed guides and references for all aspects of the Obsidian MCP Second Brain Server.
 
 **How to use this documentation:**
+
 - Start with the [main README](../README.md) for a high-level overview and quick start.
 - Use the links below to dive into specific topics as needed.
 
@@ -15,8 +15,8 @@ Welcome! This folder contains detailed guides and references for all aspects of 
 - [Development & Storage Architecture](development.md): Development workflow, storage architecture, and related commands.
 - [Contributing](contributing.md): Contribution guidelines and code standards.
 - [Dependencies](dependencies.md): Production and development dependencies.
-- [Architecture Diagram](architecture.mmd): System architecture (Mermaid diagram).
-- [Database Schema](database-schema.mmd): Database schema (Mermaid diagram).
+- [Architecture Diagram](architecture.md): System architecture (Mermaid diagram).
+- [Database Schema](database-schema.md): Database schema (Mermaid diagram).
 - [Security Features](security.md): Security features and protections.
 - [Search Weights](search.md): Search weights and scoring details.
 

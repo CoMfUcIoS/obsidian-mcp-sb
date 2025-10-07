@@ -227,8 +227,8 @@ The server uses **SQLite database storage by default** for efficient indexing an
   - Useful for development and testing
   - Uses Fuse.js for fuzzy search
 
-See [docs/architecture.mmd](docs/architecture.mmd) for the architecture diagram.
-See [docs/database-schema.mmd](docs/database-schema.mmd) for the database schema.
+See [docs/architecture.md](docs/architecture.md) for the architecture diagram.
+See [docs/database-schema.md](docs/database-schema.md) for the database schema.
 
 ## Architecture
 
