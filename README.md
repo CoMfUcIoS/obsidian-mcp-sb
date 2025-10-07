@@ -199,10 +199,6 @@ Or add to Claude Code/Claude Desktop (see Configuration & Installation below).
 
 ---
 
-See [docs/configuration.md](docs/configuration.md#frontmatter-requirements) for frontmatter requirements and examples.
-
----
-
 ## Troubleshooting & FAQ
 
 See [docs/configuration.md](docs/configuration.md#troubleshooting--faq) for common issues and solutions.
