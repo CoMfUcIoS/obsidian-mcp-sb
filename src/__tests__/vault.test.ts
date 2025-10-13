@@ -274,7 +274,13 @@ describe('ObsidianVault', () => {
 
     test('getNotesByType returns filtered notes', async () => {
       await vault.initialize();
-      const projectNotes = await vault.searchNotes('', { type: 'project' });
+      // Retry search up to 5 times in case indexing is delayed
+      let projectNotes = [];
+      for (let i = 0; i < 5; i++) {
+        projectNotes = await vault.searchNotes('', { type: 'project' });
+        if (projectNotes.length > 0) break;
+        await new Promise(res => setTimeout(res, 100));
+      }
       expect(projectNotes.length).toBe(1);
       expect(projectNotes[0].title).toBe('project');
     });
