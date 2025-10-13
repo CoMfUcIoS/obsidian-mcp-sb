@@ -142,6 +142,8 @@ describe("ObsidianVault", () => {
     });
 
     test("indexes files within size limit", async () => {
+      // Ensure Work directory exists
+      await mkdir(join(testVaultPath, "Work"), { recursive: true });
       const normalContent = "---\ntags: [test]\n---\nNormal content";
       await writeFile(join(testVaultPath, "Work", "normal.md"), normalContent);
 
@@ -155,6 +157,8 @@ describe("ObsidianVault", () => {
 
   describe("Frontmatter Validation", () => {
     test("applies default values for missing frontmatter", async () => {
+      // Ensure Work directory exists
+      await mkdir(join(testVaultPath, "Work"), { recursive: true });
       await writeFile(
         join(testVaultPath, "Work", "minimal.md"),
         "No frontmatter content",
