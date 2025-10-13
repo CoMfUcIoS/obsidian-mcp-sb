@@ -1,11 +1,26 @@
 /* global setTimeout */
 import { ObsidianVault } from "../vault.js";
-import { VaultConfig, Note } from "../types.js";
+import { VaultConfig } from "../types.js";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 
 describe("ObsidianVault", () => {
+  // Helper to retry a query until expected results are found or timeout
+  async function retryUntilFound<T>(
+    fn: () => Promise<T[]>,
+    expectedCount: number,
+    retries = 5,
+    delay = 100,
+  ): Promise<T[]> {
+    let results: T[] = [];
+    for (let i = 0; i < retries; i++) {
+      results = await fn();
+      if (results.length >= expectedCount) break;
+      await new Promise((res) => setTimeout(res, delay));
+    }
+    return results;
+  }
   let testVaultPath: string;
   let vault: ObsidianVault;
   let config: VaultConfig;
@@ -90,13 +105,13 @@ describe("ObsidianVault", () => {
 
     test("matches exact tags", async () => {
       await vault.initialize();
-      const notes = await vault.getNotesByTag("work");
+      const notes = await retryUntilFound(() => vault.getNotesByTag("work"), 2);
       expect(notes.length).toBe(2);
     });
 
     test("matches hierarchical tags (parent matches children)", async () => {
       await vault.initialize();
-      const notes = await vault.getNotesByTag("work");
+      const notes = await retryUntilFound(() => vault.getNotesByTag("work"), 2);
       // Both notes should match 'work' tag (note1 has work/puppet, note2 has work)
       expect(notes.length).toBe(2);
       const puppetNotes = notes.filter((n) =>
@@ -111,12 +126,13 @@ describe("ObsidianVault", () => {
         "---\ntags: [homework]\n---\nContent",
       );
       await vault.initialize();
-
-      const workNotes = await vault.getNotesByTag("work");
+      const workNotes = await retryUntilFound(
+        () => vault.getNotesByTag("work"),
+        2,
+      );
       const homeworkNote = workNotes.find((n) =>
         n.frontmatter.tags?.includes("homework"),
       );
-
       // "homework" should NOT match "work" tag search
       expect(homeworkNote).toBeUndefined();
     });
@@ -148,8 +164,7 @@ describe("ObsidianVault", () => {
       await writeFile(join(testVaultPath, "Work", "normal.md"), normalContent);
 
       await vault.initialize();
-      const notes = await vault.getAllNotes();
-
+      const notes = await retryUntilFound(() => vault.getAllNotes(), 1);
       expect(notes.length).toBe(1);
       expect(notes[0].title).toBe("normal");
     });
@@ -165,8 +180,7 @@ describe("ObsidianVault", () => {
       );
 
       await vault.initialize();
-      const notes = await vault.getAllNotes();
-
+      const notes = await retryUntilFound(() => vault.getAllNotes(), 1);
       expect(notes[0].frontmatter.type).toBe("note");
       expect(notes[0].frontmatter.status).toBe("active");
       expect(notes[0].frontmatter.category).toBe("personal");
@@ -180,8 +194,7 @@ describe("ObsidianVault", () => {
       );
 
       await vault.initialize();
-      const notes = await vault.getAllNotes();
-
+      const notes = await retryUntilFound(() => vault.getAllNotes(), 1);
       // Should default to 'note' for invalid type
       expect(notes[0].frontmatter.type).toBe("note");
     });
@@ -193,8 +206,7 @@ describe("ObsidianVault", () => {
       );
 
       await vault.initialize();
-      const notes = await vault.getAllNotes();
-
+      const notes = await retryUntilFound(() => vault.getAllNotes(), 1);
       // Should default to 'active' for invalid status
       expect(notes[0].frontmatter.status).toBe("active");
     });
@@ -212,8 +224,7 @@ describe("ObsidianVault", () => {
       );
 
       await vault.initialize();
-      const notes = await vault.searchNotes("", {});
-
+      const notes = await retryUntilFound(() => vault.searchNotes("", {}), 1);
       // Should only find the active note (Archive is in excludePatterns)
       expect(notes.length).toBe(1);
       expect(notes[0].path).toContain("Work");
@@ -232,15 +243,13 @@ describe("ObsidianVault", () => {
       );
 
       await vault.initialize();
-      const allNotes = await vault.getAllNotes();
-
+      const allNotes = await retryUntilFound(() => vault.getAllNotes(), 2);
       // Verify both notes were indexed
       expect(allNotes.length).toBe(2);
-
-      const notes = await vault.searchNotes("", {
-        dateFrom: "2024-01-01",
-      });
-
+      const notes = await retryUntilFound(
+        () => vault.searchNotes("", { dateFrom: "2024-01-01" }),
+        1,
+      );
       expect(notes.length).toBe(1);
       expect(notes[0].frontmatter.modified).toBe("2025-01-01");
     });
@@ -256,11 +265,10 @@ describe("ObsidianVault", () => {
       );
 
       await vault.initialize();
-
-      const notes = await vault.searchNotes("", {
-        dateTo: "2023-01-01",
-      });
-
+      const notes = await retryUntilFound(
+        () => vault.searchNotes("", { dateTo: "2023-01-01" }),
+        1,
+      );
       expect(notes.length).toBe(1);
       expect(notes[0].frontmatter.modified).toBe("2020-01-01");
     });
@@ -280,26 +288,20 @@ describe("ObsidianVault", () => {
 
     test("getNotesByType returns filtered notes", async () => {
       await vault.initialize();
-      // Retry search up to 5 times in case indexing is delayed
-      let projectNotes: Note[] = [];
-      for (let i = 0; i < 5; i++) {
-        projectNotes = await vault.searchNotes("", { type: "project" });
-        if (projectNotes.length > 0) break;
-        await new Promise((res) => setTimeout(res, 100));
-      }
+      const projectNotes = await retryUntilFound(
+        () => vault.searchNotes("", { type: "project" }),
+        1,
+      );
       expect(projectNotes.length).toBe(1);
       expect(projectNotes[0].title).toBe("project");
     });
 
     test("getNotesByStatus returns filtered notes", async () => {
       await vault.initialize();
-      // Retry search up to 5 times in case indexing is delayed
-      let completedNotes: Note[] = [];
-      for (let i = 0; i < 5; i++) {
-        completedNotes = await vault.searchNotes("", { status: "completed" });
-        if (completedNotes.length > 0) break;
-        await new Promise((res) => setTimeout(res, 100));
-      }
+      const completedNotes = await retryUntilFound(
+        () => vault.searchNotes("", { status: "completed" }),
+        1,
+      );
       expect(completedNotes.length).toBe(1);
       expect(completedNotes[0].title).toBe("task");
     });
@@ -325,13 +327,10 @@ describe("ObsidianVault", () => {
 
     test("filters by type", async () => {
       await vault.initialize();
-      // Retry search up to 5 times in case indexing is delayed
-      let notes: Note[] = [];
-      for (let i = 0; i < 5; i++) {
-        notes = await vault.searchNotes("", { type: "project" });
-        if (notes.length > 0) break;
-        await new Promise((res) => setTimeout(res, 100));
-      }
+      const notes = await retryUntilFound(
+        () => vault.searchNotes("", { type: "project" }),
+        1,
+      );
       expect(notes.length).toBe(1);
       expect(notes[0].title).toBe("project");
     });
@@ -342,7 +341,10 @@ describe("ObsidianVault", () => {
         "---\nstatus: completed\n---\nCompleted",
       );
       await vault.initialize();
-      const notes = await vault.searchNotes("", { status: "completed" });
+      const notes = await retryUntilFound(
+        () => vault.searchNotes("", { status: "completed" }),
+        1,
+      );
       expect(notes.length).toBe(1);
     });
 
@@ -352,7 +354,10 @@ describe("ObsidianVault", () => {
         "---\ncategory: work\n---\nWork note",
       );
       await vault.initialize();
-      const notes = await vault.searchNotes("", { category: "work" });
+      const notes = await retryUntilFound(
+        () => vault.searchNotes("", { category: "work" }),
+        1,
+      );
       expect(notes.length).toBe(1);
     });
   });
@@ -378,14 +383,20 @@ describe("ObsidianVault", () => {
 
     test("filters by exact path pattern", async () => {
       await vault.initialize();
-      const notes = await vault.searchNotes("", { path: "Work/Puppet" });
+      const notes = await retryUntilFound(
+        () => vault.searchNotes("", { path: "Work/Puppet" }),
+        1,
+      );
       expect(notes.length).toBe(1);
       expect(notes[0].path).toContain("Work/Puppet");
     });
 
     test("filters by glob path pattern with /**", async () => {
       await vault.initialize();
-      const notes = await vault.searchNotes("", { path: "Work/**" });
+      const notes = await retryUntilFound(
+        () => vault.searchNotes("", { path: "Work/**" }),
+        2,
+      );
       expect(notes.length).toBe(2);
       expect(notes.every((n) => n.path.startsWith("Work"))).toBe(true);
     });
