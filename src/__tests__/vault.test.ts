@@ -1,5 +1,5 @@
 import { ObsidianVault } from '../vault.js';
-import { VaultConfig } from '../types.js';
+import { VaultConfig, Note } from '../types.js';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -275,7 +275,7 @@ describe('ObsidianVault', () => {
     test('getNotesByType returns filtered notes', async () => {
       await vault.initialize();
       // Retry search up to 5 times in case indexing is delayed
-      let projectNotes = [];
+      let projectNotes: Note[] = [];
       for (let i = 0; i < 5; i++) {
         projectNotes = await vault.searchNotes('', { type: 'project' });
         if (projectNotes.length > 0) break;
