@@ -83,8 +83,7 @@ describe("ObsidianVault", () => {
       );
 
       await vault.initialize();
-      const notes = await vault.getAllNotes();
-
+      const notes = await retryUntilFound(() => vault.getAllNotes(), 1);
       // Path should be relative to vault root
       expect(notes[0].path).toBe("Work/test.md");
       expect(notes[0].path).not.toContain(testVaultPath);
