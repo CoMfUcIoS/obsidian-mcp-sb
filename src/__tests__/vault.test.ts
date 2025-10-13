@@ -293,9 +293,13 @@ describe("ObsidianVault", () => {
 
     test("getNotesByStatus returns filtered notes", async () => {
       await vault.initialize();
-      const completedNotes = await vault.searchNotes("", {
-        status: "completed",
-      });
+      // Retry search up to 5 times in case indexing is delayed
+      let completedNotes: Note[] = [];
+      for (let i = 0; i < 5; i++) {
+        completedNotes = await vault.searchNotes("", { status: "completed" });
+        if (completedNotes.length > 0) break;
+        await new Promise((res) => setTimeout(res, 100));
+      }
       expect(completedNotes.length).toBe(1);
       expect(completedNotes[0].title).toBe("task");
     });
@@ -321,7 +325,13 @@ describe("ObsidianVault", () => {
 
     test("filters by type", async () => {
       await vault.initialize();
-      const notes = await vault.searchNotes("", { type: "project" });
+      // Retry search up to 5 times in case indexing is delayed
+      let notes: Note[] = [];
+      for (let i = 0; i < 5; i++) {
+        notes = await vault.searchNotes("", { type: "project" });
+        if (notes.length > 0) break;
+        await new Promise((res) => setTimeout(res, 100));
+      }
       expect(notes.length).toBe(1);
       expect(notes[0].title).toBe("project");
     });
