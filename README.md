@@ -244,6 +244,13 @@ See [docs/database-schema.md](docs/database-schema.md) for the database schema.
 
 See [docs/dependencies.md](docs/dependencies.md) for a full list of production and development dependencies.
 
+---
+
+## Support
+
+If obsidian-mcp-sb saves you time, consider supporting development: [Buy Me a Coffee](https://buymeacoffee.com/comfucios).
+
+
 ## License
 
 MIT
