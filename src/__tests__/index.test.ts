@@ -28,7 +28,21 @@ describe('Index - Helper Functions', () => {
   });
 
   afterEach(async () => {
-    await rm(testVaultPath, { recursive: true, force: true });
+    const maxRetries = 5;
+    const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+    let lastError;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await rm(testVaultPath, { recursive: true, force: true });
+        return;
+      } catch (err) {
+        lastError = err;
+        if (attempt < maxRetries) {
+          await delay(100);
+        }
+      }
+    }
+    throw lastError;
   });
 
   describe('CLI Argument Parsing', () => {
