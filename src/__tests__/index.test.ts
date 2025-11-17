@@ -1,3 +1,4 @@
+/* global setTimeout */
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { mkdir, rm } from 'fs/promises';
 import { join } from 'path';
