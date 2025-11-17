@@ -248,7 +248,7 @@ See [docs/dependencies.md](docs/dependencies.md) for a full list of production a
 
 ## Support
 
-If obsidian-mcp-sb saves you time, consider supporting development: [Buy Me a Coffee](https://buymeacoffee.com/comfucios).
+If obsidian-mcp-sb saves you time, consider [sponsoring me on GitHub](https://github.com/sponsors/comfucios) or [buy me a coffee](https://www.buymeacoffee.com/comfucios).
 
 
 ## License
